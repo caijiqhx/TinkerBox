@@ -1,0 +1,8 @@
+# 行尾策略：批处理 / VBS 必须是 CRLF（cmd.exe 与 WSH 对 LF-only 解析会出错），
+# 其余统一 LF。这条规则能防止将来在别处检出时行尾被改坏。
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.vbs text eol=crlf
+*.ps1 text eol=crlf
+run.sh text eol=lf
