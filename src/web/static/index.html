@@ -60,6 +60,22 @@
   </div>
 </div>
 
+<!-- 应用内确认框：替代 window.confirm。
+     浏览器原生弹窗在 --app 窗口里会带上页面来源、样式也不跟主题走。 -->
+<div id="confirm" class="modal hidden">
+  <div class="modal-box confirm-box">
+    <div class="modal-head">
+      <span id="confirm-title">确认</span>
+      <button id="confirm-x" class="btn ghost icon" title="取消">✕</button>
+    </div>
+    <div class="modal-body" id="confirm-body"></div>
+    <div class="confirm-foot">
+      <button id="confirm-cancel" class="btn ghost">取消</button>
+      <button id="confirm-ok" class="btn primary">确定</button>
+    </div>
+  </div>
+</div>
+
 <script>window.__TOOLBOX_TOKEN__ = "__TOKEN_PLACEHOLDER__";</script>
 <script src="/static/app.js"></script>
 <script src="/static/tools/todo.js"></script>

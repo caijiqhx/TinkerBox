@@ -222,6 +222,74 @@ class TodoToolTest(unittest.TestCase):
         with self.assertRaises(ToolError):
             self.tool.act_rename_list({"list_id": model.DEFAULT_LIST_ID, "name": "改名"})
 
+    def test_rename_list_rejects_duplicate_but_allows_self(self):
+        self.tool.act_add_list({"name": "工作"})
+        second = self.tool.act_add_list({"name": "生活"})["list"]
+
+        with self.assertRaises(ToolError):
+            self.tool.act_rename_list({"list_id": second["id"], "name": "工作"})
+        # 改成自己原本的名字不算重名（前端的 onblur 会走到这里）
+        kept = self.tool.act_rename_list({"list_id": second["id"], "name": "生活"})
+        self.assertEqual(kept["list"]["name"], "生活")
+
+    def test_add_list_without_name_gets_default(self):
+        """不传名字时自动取名 —— 界面靠这个做到"新建清单不弹输入框"。"""
+        first = self.tool.act_add_list({})["list"]
+        self.assertEqual(first["name"], model.NEW_LIST_NAME + " 1")
+        second = self.tool.act_add_list({})["list"]
+        self.assertEqual(second["name"], model.NEW_LIST_NAME + " 2")
+        third = self.tool.act_add_list({})["list"]
+        self.assertEqual(third["name"], model.NEW_LIST_NAME + " 3")
+
+        # 编号取最小空缺：删掉「新清单 2」后再建，补回 2 而不是 4
+        self.tool.act_remove_list({"list_id": second["id"]})
+        refill = self.tool.act_add_list({})["list"]
+        self.assertEqual(refill["name"], model.NEW_LIST_NAME + " 2")
+
+        # "不传名字"与"传了空名字"是两回事：后者仍然是错误
+        with self.assertRaises(ToolError):
+            self.tool.act_add_list({"name": "   "})
+
+    def test_update_step_title(self):
+        task = self.tool.act_add({"title": "T"})["task"]
+        step = self.tool.act_add_step({"id": task["id"], "title": "原步骤"})["step"]
+
+        updated = self.tool.act_update_step(
+            {"id": task["id"], "step_id": step["id"], "title": "改过的步骤"})
+        self.assertEqual(updated["task"]["steps"][0]["title"], "改过的步骤")
+
+        with self.assertRaises(ToolError):
+            self.tool.act_update_step(
+                {"id": task["id"], "step_id": step["id"], "title": "   "})
+
+    def test_tags_are_normalized_and_searchable(self):
+        task = self.tool.act_add({"title": "买年货"})["task"]
+
+        # 逗号分隔的字符串也接受，并自动去重
+        updated = self.tool.act_update(
+            {"id": task["id"], "fields": {"tags": "生活, 采购, 生活"}})["task"]
+        self.assertEqual(updated["tags"], ["生活", "采购"])
+
+        # 搜索能命中标签（这也是标签唯一的价值所在）
+        self.assertEqual(self.tool.act_board({"keyword": "采购"})["shown"], 1)
+
+        # 超过上限的部分被截断
+        many = ["t%d" % (i,) for i in range(model.MAX_TAGS + 5)]
+        updated = self.tool.act_update({"id": task["id"], "fields": {"tags": many}})["task"]
+        self.assertEqual(len(updated["tags"]), model.MAX_TAGS)
+
+        # 空数组 = 清空
+        updated = self.tool.act_update({"id": task["id"], "fields": {"tags": []}})["task"]
+        self.assertEqual(updated["tags"], [])
+
+    def test_tags_survive_restart(self):
+        task = self.tool.act_add({"title": "带标签"})["task"]
+        self.tool.act_update({"id": task["id"], "fields": {"tags": ["a", "b"]}})
+
+        fresh = TodoTool()
+        found = fresh.act_board({"view": "list"})["groups"][0]["tasks"][0]
+        self.assertEqual(found["tags"], ["a", "b"])
+
     def test_update_rejects_unknown_field(self):
         task = self.tool.act_add({"title": "T"})["task"]
         with self.assertRaises(ToolError):

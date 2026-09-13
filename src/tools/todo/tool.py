@@ -416,7 +416,15 @@ class TodoTool(Tool):
     # ==================================================================
     def act_add_list(self, payload):
         data = store.load()
-        name = str(payload.get("name") or "").strip()
+        raw = payload.get("name")
+        if raw is None:
+            # 不给名字 = 自动取一个不重名的默认名（界面用它来"建完直接改名"）。
+            # 传了空字符串仍视为错误，避免静默改名带来的意外。
+            name = model.next_list_name([i["name"] for i in data["lists"]])
+        else:
+            name = str(raw).strip()
+            if not name:
+                raise ToolError("清单名称不能为空")
         for item in data["lists"]:
             if item["name"] == name:
                 raise ToolError("已存在同名清单：%s" % (name,))
@@ -436,7 +444,12 @@ class TodoTool(Tool):
         name = str(payload.get("name") or "").strip()
         if not name:
             raise ToolError("清单名称不能为空")
-        item["name"] = name[:model.MAX_LIST_NAME]
+        name = name[:model.MAX_LIST_NAME]
+        # 与 add_list 保持一致：不允许重名，否则左栏会出现两个看不出区别的清单
+        for other in data["lists"]:
+            if other["id"] != item["id"] and other["name"] == name:
+                raise ToolError("已存在同名清单：%s" % (name,))
+        item["name"] = name
         self._persist(data)
         return {"list": item}
 

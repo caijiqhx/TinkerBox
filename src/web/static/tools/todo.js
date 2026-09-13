@@ -24,7 +24,8 @@
     keyword: "",
     board: null,
     selected: null,
-    stepDraft: ""
+    stepDraft: "",
+    renaming: false        /* 刚建完清单：下一次渲染要把标题输入框聚焦起来 */
   };
 
   var VIEW_META = {
@@ -242,21 +243,32 @@
   }
 
   function addList() {
-    var name = window.prompt("新清单名称：", "");
-    if (!name) { return; }
-    name = String(name).trim();
-    if (!name) { return; }
-    act("add_list", { name: name });
+    /* 不再弹输入框问名字：让后端取一个不重名的默认名（新清单 1 / 2 …），
+       建好后切到该清单并直接进入改名状态 —— 少一次打断，想改也能立刻改。 */
+    ctx.callTool("todo", "add_list", {}).then(function (data) {
+      var item = data && data.list;
+      if (!item) { return refresh(); }
+      state.renaming = true;
+      return goList(item.id);
+    }).catch(function (err) {
+      ctx.toast(err.message, true);
+    });
   }
 
   function removeList(item) {
-    if (!window.confirm("删除清单「" + item.name + "」？\n其中的任务会移回「任务」，不会丢失。")) {
-      return;
-    }
-    if (state.view === "list" && state.listId === item.id) {
-      state.listId = "default";
-    }
-    act("remove_list", { list_id: item.id });
+    ctx.confirm({
+      title: "删除清单",
+      message: "删除清单「" + item.name + "」？",
+      detail: "其中的任务会移回「任务」，不会丢失。",
+      okText: "删除",
+      danger: true
+    }).then(function (ok) {
+      if (!ok) { return; }
+      if (state.view === "list" && state.listId === item.id) {
+        state.listId = "default";
+      }
+      act("remove_list", { list_id: item.id });
+    });
   }
 
   /* ================= 中栏 ================= */
@@ -275,7 +287,16 @@
       label = VIEW_META[state.view] ? VIEW_META[state.view].label : "";
     }
 
-    headBox.appendChild(el("div", { class: "list-title", text: label }));
+    var titleNode = listTitleNode(label);
+    headBox.appendChild(titleNode);
+    if (state.renaming) {
+      /* 新建清单后直接进入改名状态：想改就改，不想改按 Esc 或点开别处 */
+      state.renaming = false;
+      if (titleNode.tagName === "INPUT") {
+        titleNode.focus();
+        titleNode.select();
+      }
+    }
 
     var sub = "";
     if (state.view === "my_day" && !state.keyword) {
@@ -290,14 +311,53 @@
         class: "btn small ghost",
         text: "清理已完成",
         onclick: function () {
-          if (window.confirm("清理全部 " + shown + " 项已完成任务？")) {
-            act("clear_done", {});
-          }
+          ctx.confirm({
+            title: "清理已完成",
+            message: "清理全部 " + shown + " 项已完成任务？",
+            detail: "清理后无法撤销。",
+            okText: "清理",
+            danger: true
+          }).then(function (ok) {
+            if (ok) { act("clear_done", {}); }
+          });
         }
       }));
     } else {
       headBox.appendChild(el("div", { class: "list-sub", text: sub }));
     }
+  }
+
+  /* 自定义清单的标题可以直接改 —— 和详情面板里"点标题改标题"是同一套交互，
+     比在左栏里再挤一个按钮更好按，也不占宽度。默认清单不可改名（后端也会拒绝）。 */
+  function listTitleNode(label) {
+    var item = null;
+    if (state.view === "list" && !state.keyword) {
+      var lists = (state.board && state.board.lists) || [];
+      for (var i = 0; i < lists.length; i++) {
+        if (lists[i].id === state.listId) { item = lists[i]; break; }
+      }
+    }
+    if (!item || item.id === "default") {
+      return el("div", { class: "list-title", text: label });
+    }
+
+    var mine = item;
+    var input = el("input", {
+      class: "list-title list-title-input",
+      type: "text",
+      title: "改完按回车即保存",
+      onkeydown: function (event) {
+        if (event.key === "Enter") { input.blur(); }
+        else if (event.key === "Escape") { input.value = mine.name; input.blur(); }
+      },
+      onblur: function () {
+        var value = String(input.value || "").trim();
+        if (!value || value === mine.name) { input.value = mine.name; return; }
+        act("rename_list", { list_id: mine.id, name: value });
+      }
+    });
+    input.value = mine.name;
+    return input;
   }
 
   function dueChip(task) {
@@ -319,6 +379,20 @@
       text: "步骤 " + info.done + "/" + info.total,
       title: "已完成 " + info.done + " / " + info.total + " 个步骤"
     });
+  }
+
+  /* 列表行里最多显示几个标签，多的折叠成 +N —— 免得长标签把整行撑爆 */
+  function tagChips(task, limit) {
+    var all = task.tags || [];
+    var nodes = [];
+    var shown = Math.min(all.length, limit);
+    for (var i = 0; i < shown; i++) {
+      nodes.push(el("span", { class: "chip tag", text: all[i] }));
+    }
+    if (all.length > shown) {
+      nodes.push(el("span", { class: "chip", text: "+" + (all.length - shown) }));
+    }
+    return nodes;
   }
 
   function taskRow(task) {
@@ -347,6 +421,10 @@
     if (progress) { meta.appendChild(progress); }
     var due = dueChip(task);
     if (due) { meta.appendChild(due); }
+    var tagNodes = tagChips(task, 3);
+    for (var ti = 0; ti < tagNodes.length; ti++) {
+      meta.appendChild(tagNodes[ti]);
+    }
 
     var title = el("div", { class: "task-title", text: task.title });
     var main = el("div", {
@@ -375,10 +453,17 @@
         text: "✕",
         title: "删除任务",
         onclick: function () {
-          if (window.confirm("删除「" + task.title + "」？")) {
+          ctx.confirm({
+            title: "删除任务",
+            message: "删除「" + task.title + "」？",
+            detail: "删除后无法撤销。",
+            okText: "删除",
+            danger: true
+          }).then(function (ok) {
+            if (!ok) { return; }
             if (isSelected(task)) { state.selected = null; }
             act("remove", { id: task.id });
-          }
+          });
         }
       })
     ]));
@@ -433,6 +518,24 @@
   }
 
   /* ================= 右栏：详情 ================= */
+
+  function removeFrom(list, value) {
+    var result = [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] !== value) { result.push(list[i]); }
+    }
+    return result;
+  }
+
+  /* 标签是整体替换：后端 update 收到什么就是什么。
+     keepFocus 专给"连续添加"用 —— 刷新会重建详情面板，加完得把光标放回输入框。 */
+  function saveTags(task, next, keepFocus) {
+    return act("update", { id: task.id, fields: { tags: next } }).then(function () {
+      if (!keepFocus || !detailBox) { return; }
+      var node = detailBox.querySelector(".tag-input");
+      if (node) { node.focus(); }
+    });
+  }
 
   function renderDetail() {
     if (!detailBox) { return; }
@@ -513,6 +616,45 @@
       ])
     ]));
 
+    /* --- 标签 --- */
+    var tags = (task.tags || []).slice();
+    var tagRow = el("div", { class: "detail-row" });
+    for (var tg = 0; tg < tags.length; tg++) {
+      (function (tag) {
+        tagRow.appendChild(el("span", { class: "chip tag" }, [
+          el("span", { text: tag }),
+          el("button", {
+            class: "tag-x",
+            text: "✕",
+            title: "移除标签「" + tag + "」",
+            onclick: function () { saveTags(task, removeFrom(tags, tag), false); }
+          })
+        ]));
+      })(tags[tg]);
+    }
+    if (!tags.length) {
+      tagRow.appendChild(el("span", { class: "detail-label", text: "还没有标签" }));
+    }
+
+    var tagInput = el("input", {
+      class: "input tag-input",
+      type: "text",
+      placeholder: "加标签，回车确定"
+    });
+    tagInput.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") { return; }
+      var value = String(tagInput.value || "").trim();
+      if (!value) { return; }
+      tagInput.value = "";
+      if (tags.indexOf(value) >= 0) { return; }
+      saveTags(task, tags.concat([value]), true);
+    });
+    detailBox.appendChild(el("div", { class: "detail-sec" }, [
+      el("div", { class: "detail-label" }, [el("span", { text: "标签" })]),
+      tagRow,
+      tagInput
+    ]));
+
     /* --- 到期日 --- */
     var dueInput = el("input", { class: "input", type: "date" });
     dueInput.value = task.due || "";
@@ -572,13 +714,58 @@
         class: "btn small ghost danger",
         text: "删除任务",
         onclick: function () {
-          if (window.confirm("删除「" + task.title + "」？")) {
+          ctx.confirm({
+            title: "删除任务",
+            message: "删除「" + task.title + "」？",
+            detail: "删除后无法撤销。",
+            okText: "删除",
+            danger: true
+          }).then(function (ok) {
+            if (!ok) { return; }
             state.selected = null;
             act("remove", { id: task.id });
-          }
+          });
         }
       })
     ]));
+  }
+
+  /* 步骤文字可以点开改 —— 打错字不必删掉重加 */
+  function stepTitleNode(task, step) {
+    var node = el("div", {
+      class: "step-title",
+      text: step.title,
+      title: "点击可修改",
+      onclick: function () { editStepTitle(task, step, node); }
+    });
+    return node;
+  }
+
+  function editStepTitle(task, step, node) {
+    if (!node.parentNode) { return; }
+    var input = el("input", { class: "input step-edit", type: "text" });
+    input.value = step.title;
+    node.parentNode.replaceChild(input, node);
+    input.focus();
+    input.select();
+
+    var settled = false;
+    function finish(save) {
+      if (settled) { return; }        // keydown 之后 blur 还会来一次，只认第一次
+      settled = true;
+      var value = String(input.value || "").trim();
+      if (!save || !value || value === step.title) {
+        refresh();                    // 放弃或空值：重绘还原，不必打扰后端
+        return;
+      }
+      act("update_step", { id: task.id, step_id: step.id, title: value });
+    }
+
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") { finish(true); }
+      else if (event.key === "Escape") { finish(false); }
+    });
+    input.addEventListener("blur", function () { finish(true); });
   }
 
   function drawSteps(task) {
@@ -602,7 +789,7 @@
         });
         if (step.done) { check.checked = true; }
         row.appendChild(check);
-        row.appendChild(el("div", { class: "step-title", text: step.title }));
+        row.appendChild(stepTitleNode(task, step));
         row.appendChild(el("button", {
           class: "ico-btn",
           text: "✕",
@@ -637,6 +824,7 @@
     state.keyword = "";
     state.selected = null;
     state.stepDraft = "";
+    state.renaming = false;
 
     shell = el("div", { class: "todo-shell without-detail" });
     railBox = el("div", { class: "rail" });

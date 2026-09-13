@@ -29,6 +29,9 @@ STATUSES = (STATUS_TODO, STATUS_DONE)
 DEFAULT_LIST_ID = "default"
 DEFAULT_LIST_NAME = "任务"
 
+#: 新建清单时的默认名（带上序号，见 next_list_name）
+NEW_LIST_NAME = "新清单"
+
 MAX_TITLE = 200
 MAX_LIST_NAME = 40
 MAX_TAGS = 12
@@ -124,6 +127,21 @@ def make_list(name, order=0):
 
 def default_list():
     return {"id": DEFAULT_LIST_ID, "name": DEFAULT_LIST_NAME, "order": 0}
+
+
+def next_list_name(existing_names):
+    """给新清单取一个不重名的默认名字：新清单 1、新清单 2 …
+
+    新建清单时不再让用户先弹框输名字 —— 先生成一个能用的名字，建完直接改名即可。
+    编号取**最小的空缺**（删掉「新清单 1」后再建会补回 1），这样结果可预期。
+    """
+    taken = set(existing_names or [])
+    index = 1
+    while True:
+        candidate = "%s %d" % (NEW_LIST_NAME, index)
+        if candidate not in taken:
+            return candidate
+        index += 1
 
 
 def make_step(title):

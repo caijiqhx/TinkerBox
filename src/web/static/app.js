@@ -83,6 +83,47 @@
     document.getElementById("modal").className = "modal hidden";
   }
 
+  /* ---- 应用内确认框（替代 window.confirm）----
+     浏览器原生弹窗有三个问题：样式跟主题无关、在 --app 窗口里会显示页面来源、
+     而且它阻塞整个页面。这里做成页内对话框，返回 Promise<boolean>。 */
+  var confirmResolve = null;
+
+  function confirmDialog(options) {
+    options = options || {};
+    return new Promise(function (resolve) {
+      confirmResolve = resolve;
+
+      document.getElementById("confirm-title").textContent = options.title || "确认";
+
+      var body = document.getElementById("confirm-body");
+      clear(body);
+      body.appendChild(el("div", { class: "confirm-text", text: options.message || "" }));
+      if (options.detail) {
+        body.appendChild(el("div", { class: "confirm-detail", text: options.detail }));
+      }
+
+      var ok = document.getElementById("confirm-ok");
+      ok.textContent = options.okText || "确定";
+      ok.className = "btn " + (options.danger ? "danger-solid" : "primary");
+      document.getElementById("confirm-cancel").textContent = options.cancelText || "取消";
+
+      document.getElementById("confirm").className = "modal";
+      ok.focus();
+    });
+  }
+
+  function confirmOpen() {
+    return document.getElementById("confirm").className.indexOf("hidden") < 0;
+  }
+
+  function settleConfirm(result) {
+    if (!confirmOpen()) { return; }        // Esc 与点击可能先后到达，只认第一次
+    document.getElementById("confirm").className = "modal hidden";
+    var resolve = confirmResolve;
+    confirmResolve = null;
+    if (resolve) { resolve(result); }
+  }
+
   /* ================= API ================= */
 
   function request(method, path, payload) {
@@ -239,19 +280,25 @@
   }
 
   function quitApp() {
-    if (!window.confirm("确定要关闭工具箱服务吗？\n关闭后这个页面就会失效，下次使用需要重新运行启动脚本。")) {
-      return;
-    }
-    saidGoodbye = true;
-    apiPost("/api/quit").catch(function () { /* 服务即将关闭，忽略 */ });
+    confirmDialog({
+      title: "关闭服务",
+      message: "确定要关闭工具箱服务吗？",
+      detail: "关闭后这个页面就会失效，下次使用需要重新运行启动脚本。",
+      okText: "关闭服务",
+      danger: true
+    }).then(function (ok) {
+      if (!ok) { return; }
+      saidGoodbye = true;
+      apiPost("/api/quit").catch(function () { /* 服务即将关闭，忽略 */ });
 
-    var node = document.getElementById("server-status");
-    if (node) { node.textContent = "服务已关闭"; }
+      var node = document.getElementById("server-status");
+      if (node) { node.textContent = "服务已关闭"; }
 
-    var main = mainNode();
-    clear(main);
-    main.appendChild(pageHead("服务已关闭", "可以直接关掉这个窗口了。下次使用请重新运行启动脚本。"));
-    main.appendChild(emptyBlock("感谢使用", "✓"));
+      var main = mainNode();
+      clear(main);
+      main.appendChild(pageHead("服务已关闭", "可以直接关掉这个窗口了。下次使用请重新运行启动脚本。"));
+      main.appendChild(emptyBlock("感谢使用", "✓"));
+    });
   }
 
   /* ================= 服务状态 ================= */
@@ -359,6 +406,7 @@
     apiPost: apiPost,
     callTool: callTool,
     toast: toast,
+    confirm: confirmDialog,
     openModal: openModal,
     closeModal: closeModal,
     go: function (key) { window.location.hash = "#" + key; },
@@ -369,6 +417,7 @@
   window.ToolBox = {
     registerTool: function (id, mod) { registry[id] = mod; },
     toast: toast,
+    confirm: confirmDialog,
     el: el,
     clear: clear,
     ctx: ctx
@@ -383,6 +432,30 @@
     document.getElementById("modal-close").addEventListener("click", closeModal);
     document.getElementById("modal").addEventListener("click", function (event) {
       if (event.target === this) { closeModal(); }
+    });
+
+    /* 确认框：确定 / 取消 / 右上角 ✕ / 点遮罩都算回答，Esc 取消、回车确定 */
+    document.getElementById("confirm-ok").addEventListener("click", function () {
+      settleConfirm(true);
+    });
+    document.getElementById("confirm-cancel").addEventListener("click", function () {
+      settleConfirm(false);
+    });
+    document.getElementById("confirm-x").addEventListener("click", function () {
+      settleConfirm(false);
+    });
+    document.getElementById("confirm").addEventListener("click", function (event) {
+      if (event.target === this) { settleConfirm(false); }
+    });
+    document.addEventListener("keydown", function (event) {
+      if (!confirmOpen()) { return; }
+      if (event.key === "Escape") {
+        settleConfirm(false);
+      } else if (event.key === "Enter") {
+        // 焦点在某个按钮上时交给按钮自己处理（否则"取消"会被回车变成"确定"）
+        var tag = (event.target && event.target.tagName) || "";
+        if (tag !== "BUTTON") { settleConfirm(true); }
+      }
     });
     window.addEventListener("hashchange", route);
     window.addEventListener("pagehide", sayGoodbye);
