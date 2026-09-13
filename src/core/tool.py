@@ -15,12 +15,13 @@ from core.errors import ToolError
 class ToolMeta(object):
     """工具的元信息，供入口页 / 导航 / CLI 帮助渲染。"""
 
-    def __init__(self, tid, name, desc="", icon="", order=100):
+    def __init__(self, tid, name, desc="", icon="", order=100, icon_html=""):
         self.id = tid
         self.name = name
         self.desc = desc
         self.icon = icon
         self.order = order
+        self.icon_html = icon_html   # 可选：内联 SVG，导航/入口页优先用它
 
     def to_dict(self):
         return {
@@ -28,6 +29,7 @@ class ToolMeta(object):
             "name": self.name,
             "desc": self.desc,
             "icon": self.icon,
+            "icon_html": self.icon_html,
             "order": self.order,
         }
 

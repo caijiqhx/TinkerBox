@@ -202,6 +202,16 @@
     ]);
   }
 
+  function navIcon(tool) {
+    var span = el("span", { class: "nav-icon" });
+    if (tool.icon_html) {
+      span.innerHTML = tool.icon_html;
+    } else {
+      span.textContent = tool.icon || "◆";
+    }
+    return span;
+  }
+
   function renderNav() {
     var nav = document.getElementById("nav");
     while (nav.children.length > 1) { nav.removeChild(nav.lastChild); }
@@ -212,7 +222,7 @@
           href: "#/" + tool.id,
           "data-route": "/" + tool.id
         }, [
-          el("span", { class: "nav-icon", text: tool.icon || "◆" }),
+          navIcon(tool),
           el("span", { text: tool.name })
         ]));
       })(tools[i]);

@@ -36,6 +36,9 @@ class TodoTool(Tool):
         name="待办清单",
         desc="参考微软待办：我的一天、重要星标、步骤拆解、到期日与多清单。",
         icon="✓",
+        icon_html='<svg viewBox="0 0 16 16" class="ic" width="16" height="16" fill="none" '
+                  'stroke="currentColor" stroke-width="2.6" stroke-linecap="round" '
+                  'stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 5"/></svg>',
         order=10,
     )
 
