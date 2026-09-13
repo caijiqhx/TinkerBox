@@ -32,19 +32,29 @@ run.bat
 ./run.sh
 ```
 
-启动后会打开界面（优先用浏览器 `--app` 模式的无地址栏窗口）。
+启动脚本只负责**把服务拉起来**（默认不弹浏览器窗口），之后用浏览器访问
+`http://127.0.0.1:8765` 即可 —— 建议存成书签。
+
+想让启动时顺便弹出窗口，加 `--open`：
+
+```bash
+run.bat --open          # Windows
+./run.sh --open         # Linux / 统信 UOS
+```
+
+（`--open` 会优先用浏览器 `--app` 模式打开无地址栏窗口；找不到 Chromium 内核浏览器时退化为普通标签页。）
 
 ### 运行方式：常驻
 
 服务是**常驻**的 —— 关掉浏览器窗口后它继续留在后台，所以**一天只需要启动一次**：
 
 ```
-早上点一次 run          → 服务起来 + 打开界面
+早上点一次 run          → 服务起来（无窗口）
 之后随时点浏览器书签     → 秒开（服务还在，不会重启）
 晚上关机                → 服务自然结束
 ```
 
-再次运行启动脚本**不会重复起服务**：它会先探测，发现已有实例就直接打开界面。
+再次运行启动脚本**不会重复起服务**：它会先探测，发现已有实例就直接把地址打给你。
 
 **黑窗可以直接关掉。** `run.bat` / `run.sh` 会把真正的服务放在一个**脱离终端的独立进程**里
 （Windows 上走 `pythonw`，不附着任何控制台），启动脚本本身跑完就退出 ——
@@ -64,13 +74,15 @@ run.bat
 ### 其他用法
 
 ```bash
+python3 src/main.py                        # 起服务（默认不弹浏览器）
+python3 src/main.py --open                 # 起服务并自动打开浏览器窗口
 python3 src/main.py status                 # 查看服务状态（端口、运行时长）
 python3 src/main.py stop                   # 关闭后台服务
 python3 src/main.py doctor                 # 环境自检（换机器后先跑这个）
 python3 src/main.py help                   # 查看用法与工具列表
 python3 src/main.py todo list              # 命令行使用待办清单
 python3 src/main.py todo add "买牛奶" --due 2026-09-20
-python3 src/main.py --no-browser           # 只起服务，不自动开浏览器
+python3 src/main.py --no-browser           # 强制不打开浏览器（优先级高于 --open）
 python3 src/main.py --detach               # 后台分离启动（run.bat / run.sh 默认走这条）
 python3 src/main.py --force                # 忽略"已有实例在运行"，强行再起一个
 TOOLBOX_UI=cli python3 src/main.py         # 强制 CLI（用于在当前机器上测降级路径）
@@ -199,7 +211,7 @@ Terminal=false
 Categories=Utility;
 ```
 
-**Windows** —— 右键 `run-silent.vbs` → 发送到 → 桌面快捷方式，再给快捷方式换图标即可（`run-silent.vbs` 用 `pythonw` 启动，不会弹出控制台黑窗口）。
+**Windows** —— 右键 `run-silent.vbs` → 发送到 → 桌面快捷方式，再给快捷方式换图标即可（`run-silent.vbs` 用 `pythonw` 启动，不会弹出控制台黑窗口）。双击它只会**静默把服务拉起来**（没有任何窗口），然后点浏览器书签使用；只有启动失败时才会弹一个提示框。
 
 ---
 

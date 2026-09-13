@@ -1,7 +1,8 @@
 #!/bin/sh
 # ToolBox 启动脚本（Linux / 统信 UOS）
 #
-#   ./run.sh                  启动服务并打开界面（已在运行则直接打开）
+#   ./run.sh                  启动后台服务（不弹浏览器，用书签访问）
+#   ./run.sh --open           启动服务并自动打开浏览器窗口
 #   ./run.sh status           查看服务状态
 #   ./run.sh stop             关闭后台服务
 #   ./run.sh doctor           环境自检

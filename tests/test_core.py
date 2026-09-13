@@ -21,6 +21,7 @@ from core import registry                            # noqa: E402
 from core.errors import NotFoundError, ToolError     # noqa: E402
 from core.tool import Tool, ToolMeta                 # noqa: E402
 from services import config, jsonio                  # noqa: E402
+import main                                          # noqa: E402
 
 
 class _DemoTool(Tool):
@@ -182,6 +183,44 @@ class ConfigTest(unittest.TestCase):
             handle.write("这不是 JSON")
         config.reload()
         self.assertEqual(config.get("theme"), "auto")
+
+
+class LaunchOptionsTest(unittest.TestCase):
+    """启动参数：默认**不**弹浏览器窗口，只有 --open 才弹。
+
+    日常用法是点浏览器书签，启动脚本只负责把服务拉起来 ——
+    每次双击都弹窗反而是干扰，所以默认值必须是 False。
+    """
+
+    def test_default_does_not_open_browser(self):
+        options, rest = main.parse_args([])
+        self.assertEqual(rest, [])
+        self.assertFalse(main.want_browser(options))
+
+    def test_open_flag_enables_browser(self):
+        options, rest = main.parse_args(["--open"])
+        self.assertTrue(main.want_browser(options))
+        self.assertEqual(rest, [])
+
+    def test_no_browser_wins_over_open(self):
+        options, _rest = main.parse_args(["--open", "--no-browser"])
+        self.assertFalse(main.want_browser(options))
+
+    def test_ui_none_does_not_open_browser(self):
+        options, _rest = main.parse_args(["--ui=none"])
+        self.assertEqual(options["ui"], "none")
+        self.assertFalse(main.want_browser(options))
+
+    def test_open_before_command_is_global(self):
+        options, rest = main.parse_args(["--open", "status"])
+        self.assertTrue(main.want_browser(options))
+        self.assertEqual(rest, ["status"])
+
+    def test_options_after_command_are_not_global(self):
+        # 工具子命令的内容不能被当成全局选项吞掉
+        options, rest = main.parse_args(["todo", "add", "--open"])
+        self.assertFalse(main.want_browser(options))
+        self.assertEqual(rest, ["todo", "add", "--open"])
 
 
 if __name__ == "__main__":

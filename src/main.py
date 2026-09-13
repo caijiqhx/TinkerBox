@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """ToolBox 唯一入口。
 
-    python3 src/main.py                      起 Web UI
+    python3 src/main.py                      起服务（默认不弹浏览器，用书签访问）
+    python3 src/main.py --open               起服务并自动打开浏览器窗口
     python3 src/main.py doctor               环境自检
     python3 src/main.py help                 查看用法与工具列表
     python3 src/main.py todo add "买牛奶"     调用工具的 CLI 子命令
-    python3 src/main.py --ui=none --port=8765 只起服务不开浏览器
 
 纯标准库，兼容 Python 3.7。不需要 pip、不需要联网、不需要 root。
 """
@@ -49,8 +49,8 @@ def parse_args(argv):
     这样 `todo add "买牛奶"` 的内容不会被误当成全局选项。
     """
     options = {"ui": None, "port": None, "host": "127.0.0.1",
-               "browser": "", "no_browser": False, "force": False,
-               "detach": False}
+               "browser": "", "no_browser": False, "open": False,
+               "force": False, "detach": False}
     rest = []
 
     index = 0
@@ -84,7 +84,15 @@ def parse_args(argv):
             continue
 
         if name == "--no-browser":
+            # 显式声明"不要打开浏览器"，优先级高于 --open
             options["no_browser"] = True
+            index += 1
+            continue
+
+        if name == "--open":
+            # 启动后自动打开浏览器窗口。
+            # 默认**不打开** —— 日常用法是点书签访问，没必要每次都弹窗。
+            options["open"] = True
             index += 1
             continue
 
@@ -117,6 +125,17 @@ def resolve_ui(options):
     if env:
         return env
     return str(config.get("ui") or "web").strip().lower()
+
+
+def want_browser(options):
+    """启动后是否自动打开浏览器。
+
+    **默认不打开** —— 日常用法是点浏览器书签，启动脚本只负责把服务拉起来。
+    需要弹窗时加 `--open`；`--no-browser` 用于显式关闭且优先级更高。
+    """
+    if options.get("no_browser"):
+        return False
+    return bool(options.get("open"))
 
 
 # ----------------------------------------------------------------------
@@ -192,20 +211,20 @@ def run_detached(options):
     port = _resolve_port(options)
     window_size = config.get("window_size", "")
 
-    # ---------- 已经有一个实例在跑？直接打开界面 ----------
+    # ---------- 已经有一个实例在跑？直接提示地址 ----------
     if not options.get("force"):
         record, identity = instance.find_running()
         if record is not None:
             url = url_of(record["port"])
             _say("")
-            _say("  工具箱服务已经在运行，直接为你打开界面")
-            _say("  端口     : %d" % (record["port"],))
+            _say("  工具箱服务已经在运行")
+            _say("  访问地址 : %s" % (url,))
             _say("  已运行   : %s" % (_human_duration(identity.get("uptime")),))
             _say("")
-            if options["no_browser"]:
-                _say("  访问地址 : %s" % (url,))
-            else:
+            if want_browser(options):
                 _open_browser_or_hint(url, window_size, options)
+            else:
+                _say("  在浏览器里打开上面的地址即可（建议存成书签）")
             return 0
 
     # 清掉可能残留的记录，免得子进程或被后续探测误导
@@ -262,10 +281,11 @@ def run_detached(options):
     _say("  关闭服务：界面左下角的「关闭服务」，或执行 %s stop" % (RUN_CMD,))
     _say("")
 
-    if options["no_browser"]:
-        _say("  已按 --no-browser 跳过自动打开，请手动访问上面的地址")
-    else:
+    if want_browser(options):
         _open_browser_or_hint(url, window_size, options)
+    else:
+        _say("  在浏览器里打开上面的地址即可（建议存成书签）")
+        _say("  想让启动时自动弹出窗口：%s --open" % (RUN_CMD,))
     return 0
 
 
@@ -286,15 +306,14 @@ def run_web(options):
         if record is not None:
             url = "http://127.0.0.1:%d/" % (record["port"],)
             _say("")
-            _say("  工具箱服务已经在运行，直接为你打开界面")
-            _say("  端口     : %d" % (record["port"],))
-            _say("  已运行   : %s" % (_human_duration(identity.get("uptime")),))
+            _say("  工具箱服务已经在运行")
             _say("  访问地址 : %s" % (url,))
+            _say("  已运行   : %s" % (_human_duration(identity.get("uptime")),))
             _say("")
-            if options["no_browser"]:
-                _say("  已按 --no-browser 跳过自动打开")
-            else:
+            if want_browser(options):
                 _open_browser_or_hint(url, window_size, options)
+            else:
+                _say("  在浏览器里打开上面的地址即可（建议存成书签）")
             return 0
 
     # ---------------- 启动新服务 ----------------
@@ -346,10 +365,12 @@ def run_web(options):
     _say("")
 
     mode = "manual"
-    if options["no_browser"]:
-        _say("  已按 --no-browser 跳过自动打开，请手动访问上面的地址")
-    else:
+    if want_browser(options):
         mode = _open_browser_or_hint(url, window_size, options)
+    else:
+        _say("  在浏览器里打开上面的地址即可（建议存成书签）")
+        _say("  想让启动时自动弹出窗口：加 --open")
+    _say("")
 
     if not keep_alive and mode in ("app", "browser"):
         # 跟随窗口模式：只有浏览器真的打开了才开始计时

@@ -268,14 +268,18 @@ def open_in_file_manager(path)
 ## 7. 入口设计（main.py）
 
 ```bash
-python3 src/main.py                     # 默认：起 Web UI
+python3 src/main.py                     # 默认：起服务（不弹浏览器窗口，用书签访问）
+python3 src/main.py --open              # 起服务并自动打开浏览器窗口
 python3 src/main.py --ui=cli            # 强制 CLI（TOOLBOX_UI=cli 亦可）
 python3 src/main.py --ui=none --port=8765   # 只起服务，不开浏览器
-python3 src/main.py --no-browser        # 起服务但不自动开浏览器
+python3 src/main.py --no-browser        # 强制不打开浏览器（优先级高于 --open）
 python3 src/main.py doctor              # 环境自检并打印报告
 python3 src/main.py todo list           # 直接调工具的 CLI 子命令
 python3 src/main.py todo add "买牛奶"
 ```
+
+**默认不弹浏览器窗口**：日常用法是点浏览器书签，启动脚本只负责把服务拉起来；
+每次双击都弹窗纯属干扰。需要弹窗时显式加 `--open`。
 
 **`--ui` / `TOOLBOX_UI` 的用途**：让你**在 Windows 开发机上就能测完所有承载路径**，不必真去找缺组件的机器。
 

@@ -3,12 +3,13 @@
 ' Uses pythonw so no console window appears, making the toolbox look like an
 ' ordinary desktop application.
 '
-' Usage: right-click this file -> Send to -> Desktop (create shortcut),
-'        then change the shortcut icon to assets\icon.ico if you like.
+' Double-clicking starts the background service: no console window, no browser
+' window. Open http://127.0.0.1:8765 in your browser (bookmark it) and it is
+' there. A message box appears only when start-up failed.
 
 Option Explicit
 
-Dim shell, fso, base, target, cmd
+Dim shell, fso, base, target, cmd, rc
 
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -24,5 +25,14 @@ If Not fso.FileExists(target) Then
 End If
 
 cmd = "pythonw """ & target & """ --detach"
-' second argument 0 = hidden window, third argument False = do not wait
-shell.Run cmd, 0, False
+' 2nd arg 0 = hidden window. 3rd arg True = wait for the exit code, which is
+' safe because the launcher returns as soon as the service is up.
+rc = shell.Run(cmd, 0, True)
+
+If rc <> 0 Then
+    MsgBox "ToolBox failed to start (code " & rc & ")." & vbCrLf & vbCrLf & _
+           "Make sure port 8765 is free, or run run.bat to see the details.", _
+           vbExclamation, "ToolBox"
+End If
+
+WScript.Quit rc
