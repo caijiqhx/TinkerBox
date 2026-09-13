@@ -82,18 +82,46 @@ class TodoToolTest(unittest.TestCase):
             with self.assertRaises(ToolError):
                 self.tool.act_add({"title": "看不到的任务", "view": view})
 
-    def test_my_day_only_shows_today(self):
+    def test_my_day_carries_over_unfinished(self):
         task = self.tool.act_add({"title": "今天的事"})["task"]
         self.assertEqual(self.tool.act_board({"view": "my_day"})["shown"], 0)
 
         self.tool.act_toggle_my_day({"id": task["id"]})
         self.assertEqual(self.tool.act_board({"view": "my_day"})["shown"], 1)
 
-        # 手工把日期改成昨天 —— 应当自动"过期"出「我的一天」
+        # 昨天加入、今天未完成 —— 应当**继续可见**（自动延续，不用每天重新点 ☀）
         data = store.load()
         data["tasks"][0]["my_day"] = _today(-1)
         store.save(data)
+        self.assertEqual(self.tool.act_board({"view": "my_day"})["shown"], 1)
+        self.assertEqual(self.tool.act_board({"view": "my_day"})["views"]["my_day"], 1)
+
+    def test_my_day_no_carry_over_if_not_marked(self):
+        # my_day 为空 = 从未加入 → 不出现在「我的一天」
+        task = self.tool.act_add({"title": "没加进今天"})["task"]
+        self.assertEqual(task["my_day"], "")
         self.assertEqual(self.tool.act_board({"view": "my_day"})["shown"], 0)
+
+    def test_my_day_carry_over_toggle_removes(self):
+        # 延续中的任务（my_day 是昨天）再点 ☀ → 移出（清空），而不是继续"加入今天"
+        task = self.tool.act_add({"title": "延续任务"})["task"]
+        data = store.load()
+        data["tasks"][0]["my_day"] = _today(-1)
+        store.save(data)
+        self.assertEqual(self.tool.act_board({"view": "my_day"})["shown"], 1)
+
+        self.tool.act_toggle_my_day({"id": task["id"]})
+        self.assertEqual(store.load()["tasks"][0]["my_day"], "")
+        self.assertEqual(self.tool.act_board({"view": "my_day"})["shown"], 0)
+
+    def test_my_day_toggle_rejoins_today(self):
+        # 移出后再点 ☀ → 重新加入（my_day 回到今天）
+        task = self.tool.act_add({"title": "加回来"})["task"]
+        self.tool.act_toggle_my_day({"id": task["id"]})
+        self.tool.act_toggle_my_day({"id": task["id"]})
+        self.tool.act_toggle_my_day({"id": task["id"]})
+        self.assertEqual(store.load()["tasks"][0]["my_day"], _today(0))
+        self.assertEqual(self.tool.act_board({"view": "my_day"})["shown"], 1)
 
     def test_completed_view_and_toggle(self):
         task = self.tool.act_add({"title": "倒垃圾"})["task"]

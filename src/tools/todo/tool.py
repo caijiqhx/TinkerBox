@@ -89,7 +89,6 @@ class TodoTool(Tool):
 
     @staticmethod
     def _view_counts(tasks, trash=None):
-        today = model.today_text()
         counts = {"all": 0, "my_day": 0, "important": 0, "planned": 0,
                   "completed": 0, "trash": len(trash or [])}
         for task in tasks:
@@ -97,7 +96,7 @@ class TodoTool(Tool):
                 counts["completed"] += 1
                 continue
             counts["all"] += 1
-            if task.get("my_day") == today:
+            if model.is_in_my_day(task):
                 counts["my_day"] += 1
             if task.get("important"):
                 counts["important"] += 1
@@ -131,8 +130,6 @@ class TodoTool(Tool):
             chosen.sort(key=self._search_key)
             return chosen
 
-        today = model.today_text()
-
         if view == model.VIEW_COMPLETED:
             chosen = [t for t in tasks if t.get("status") == model.STATUS_DONE]
         elif view == model.VIEW_ALL:
@@ -141,7 +138,7 @@ class TodoTool(Tool):
         elif view == model.VIEW_MY_DAY:
             chosen = [t for t in tasks
                       if t.get("status") != model.STATUS_DONE
-                      and t.get("my_day") == today]
+                      and model.is_in_my_day(t)]
         elif view == model.VIEW_IMPORTANT:
             chosen = [t for t in tasks
                       if t.get("status") != model.STATUS_DONE and t.get("important")]
@@ -402,11 +399,20 @@ class TodoTool(Tool):
         return {"task": task}
 
     def act_toggle_my_day(self, payload):
-        """加入 / 移出「我的一天」。"""
+        """加入 / 移出「我的一天」。
+
+        加入 = 把 my_day 设为今天；移出 = 清空。
+        判断"当前是否在"用可见性（is_in_my_day，含昨天遗留的任务），
+        而不是 `my_day == today` —— 否则昨天没做完的任务，今天看到的是
+        ☀ 已点亮（可见），却因为 my_day 是昨天而把"点亮"误判成"未加入"，
+        点一下它不会被移出，反而把标记更新成今天，永远移不出去。
+        """
         data = store.load()
         task = self._find_task(data["tasks"], payload.get("id"))
-        today = model.today_text()
-        task["my_day"] = "" if task.get("my_day") == today else today
+        if model.is_in_my_day(task):
+            task["my_day"] = ""
+        else:
+            task["my_day"] = model.today_text()
         self._touch(task)
         self._persist(data)
         return {"task": task}

@@ -3,8 +3,8 @@
 参考微软待办的组织方式：
 - **清单（list）**：任务归属某个清单，至少有一个默认清单
 - **重要（important）**：星标
-- **我的一天（my_day）**：存日期字符串，只有等于"今天"的任务才出现在该视图 ——
-  这样每天自动清空，不需要任何后台定时任务
+- **我的一天（my_day）**：存加入时的日期，只要**不晚于今天且未完成**就出现在该视图 ——
+  昨天没做完的今天自动延续，不需要任何后台定时任务
 - **到期日（due）**：日期字符串，用于"已计划"视图
 - **步骤（steps）**：子任务，本任务内嵌
 - 完成状态简化为 done / 未完成两种（对齐微软待办的单复选框）
@@ -74,6 +74,21 @@ def now_text():
 
 def today_text():
     return datetime.date.today().isoformat()
+
+
+def is_in_my_day(task, today=None):
+    """任务是否当前可见于「我的一天」。
+
+    my_day 保存的是"加入那天"的日期；只要它**不晚于今天**且任务未完成，
+    就持续可见 —— 昨天没做完的今天还在（微软待办行为，不用每天重新点 ☀）。
+    重复任务完成时会把这个字段推到未来，未来日期不算可见，
+    所以"今天勾掉 → 今天消失"依然成立。
+    """
+    today = today or datetime.date.today()
+    mark = parse_date(task.get("my_day"))
+    if mark is None:
+        return False
+    return mark <= today
 
 
 def week_end(today=None):

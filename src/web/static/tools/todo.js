@@ -85,7 +85,10 @@
   }
 
   function inMyDay(task) {
-    return !!task.my_day && task.my_day === isoToday();
+    /* 与后端 model.is_in_my_day 同口径：my_day 是非空的过去/今天日期即视为"在我的一天"。
+       （昨天没做完的今天还在，不用每天重新点 ☀；重复任务顺延出的未来日期不算。） */
+    if (!task.my_day) { return false; }
+    return task.my_day <= isoToday();
   }
 
   var REPEAT_LABELS = { none: "", daily: "每天", weekly: "每周", monthly: "每月" };
