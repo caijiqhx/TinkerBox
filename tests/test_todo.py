@@ -941,6 +941,24 @@ class TodoToolTest(unittest.TestCase):
     def test_cli_unknown_command(self):
         self.assertEqual(self.tool.cli(["nope"]), 2)
 
+    def test_cli_today_toggles_by_visibility_for_carried_over_task(self):
+        """CLI `today` 对昨天遗留（my_day < 今天但仍可见）任务的判定
+        必须用 is_in_my_day —— 否则"要移出却输出已加入"。"""
+        from io import StringIO
+        import sys
+        buf = StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            task = self.tool.act_add({"title": "昨天加的"})["task"]
+            self.tool.act_update({"id": task["id"], "fields": {"my_day": _today(-1)}})
+            # 昨天标记、今天仍可见 → CLI 应判定为"移出"（不再误报"已加入"）
+            self.assertEqual(self.tool.cli(["today", task["id"]]), 0)
+            self.assertIn("已移出", buf.getvalue())
+            self.assertEqual(store.load()["tasks"][0]["my_day"], "")
+        finally:
+            sys.stdout = old
+
 
 if __name__ == "__main__":
     unittest.main()

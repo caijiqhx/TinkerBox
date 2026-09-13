@@ -848,7 +848,7 @@ class TodoTool(Tool):
             print("用法：todo today <id>")
             return 2
         task = self.act_toggle_my_day({"id": argv[0]})["task"]
-        inside = task["my_day"] == model.today_text()
+        inside = model.is_in_my_day(task)
         print("%s「我的一天」  %s" % ("已加入" if inside else "已移出", task["title"]))
         return 0
 
