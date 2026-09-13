@@ -57,8 +57,9 @@ def load():
                 order += 1
     lists.sort(key=lambda item: (item.get("order", 0), item.get("name") or ""))
 
-    # 默认清单始终存在，且排在最前
-    lists.insert(0, model.default_list())
+    # 默认清单（「未分类」）始终存在，排在最后 —— 它是兜底容器，
+    # 置顶位置留给用户真正在用的自定义清单
+    lists.append(model.default_list())
     valid_ids = set(item["id"] for item in lists)
 
     # ---- 任务 ----

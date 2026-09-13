@@ -43,7 +43,9 @@ REPEAT_LABELS = {
 }
 
 DEFAULT_LIST_ID = "default"
-DEFAULT_LIST_NAME = "任务"
+#: 默认清单名。定位是"未分类任务的兜底容器"（新建任务默认落点、
+#: 删清单/恢复任务的收容所），不叫「任务」以免和"全部任务"视图混淆。
+DEFAULT_LIST_NAME = "未分类"
 
 #: 新建清单时的默认名（带上序号，见 next_list_name）
 NEW_LIST_NAME = "新清单"

@@ -389,8 +389,9 @@
     for (var n = 0; n < lists.length; n++) {
       (function (item) {
         var isDefault = item.id === "default";
-        // 已经在最前面的清单不需要"置顶"（lists[0] 是默认清单，所以比的是 n > 1）
-        var alreadyFirst = (n === 1);
+        // 默认清单（未分类）固定排最后，兜底容器不参与排序；
+        // 自定义清单中已经排在最前的那个不需要"置顶"。
+        var alreadyFirst = !isDefault && (n === 0);
         railBox.appendChild(railItem({
           icon: isDefault ? "▤" : "•",
           label: item.name,
@@ -400,7 +401,7 @@
           onclick: function () { goList(item.id); },
           onPin: (isDefault || alreadyFirst) ? null : function () { pinList(item); },
           onRemove: isDefault ? null : function () { removeList(item); },
-          // 默认清单固定第一，不参与拖拽
+          // 默认清单固定最后，不参与拖拽
           drag: isDefault ? null : listDragHandlers(item)
         }));
       })(lists[n]);

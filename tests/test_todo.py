@@ -52,14 +52,16 @@ class TodoToolTest(unittest.TestCase):
 
     def test_default_list_always_exists(self):
         board = self.tool.act_board({})
-        self.assertEqual(board["lists"][0]["id"], model.DEFAULT_LIST_ID)
-        self.assertEqual(board["lists"][0]["name"], model.DEFAULT_LIST_NAME)
+        # 默认清单（未分类）排在最后
+        self.assertEqual(board["lists"][-1]["id"], model.DEFAULT_LIST_ID)
+        self.assertEqual(board["lists"][-1]["name"], model.DEFAULT_LIST_NAME)
 
     def test_task_goes_to_default_list(self):
         self.tool.act_add({"title": "买牛奶"})
         board = self.tool.act_board({"view": "list"})
         self.assertEqual(len(board["groups"][0]["tasks"]), 1)
-        self.assertEqual(board["lists"][0]["count"], 1)
+        default = [i for i in board["lists"] if i["id"] == model.DEFAULT_LIST_ID][0]
+        self.assertEqual(default["count"], 1)
 
     # ---------------------------------------------------------------- 视图
     def test_add_in_view_sets_context(self):
@@ -349,18 +351,22 @@ class TodoToolTest(unittest.TestCase):
     # ---------------------------------------------------------------- 清单
     def test_list_crud_and_move(self):
         created = self.tool.act_add_list({"name": "工作"})["list"]
+
+        def by_name(name):
+            return [i for i in self.tool.act_board({})["lists"] if i["name"] == name][0]
+
         board = self.tool.act_board({})
         self.assertEqual(len(board["lists"]), 2)
-        self.assertEqual(board["lists"][1]["name"], "工作")
+        self.assertEqual(by_name("工作")["name"], "工作")
 
         self.tool.act_add({"title": "周报", "list_id": created["id"]})
         board = self.tool.act_board({"view": "list", "list_id": created["id"]})
         self.assertEqual(board["shown"], 1)
         self.assertEqual(board["title"], "工作")
-        self.assertEqual(board["lists"][1]["count"], 1)
+        self.assertEqual(by_name("工作")["count"], 1)
 
         self.tool.act_rename_list({"list_id": created["id"], "name": "工作事务"})
-        self.assertEqual(self.tool.act_board({})["lists"][1]["name"], "工作事务")
+        self.assertEqual(by_name("工作事务")["name"], "工作事务")
 
         result = self.tool.act_remove_list({"list_id": created["id"]})
         self.assertEqual(result["moved"], 1)
@@ -798,23 +804,23 @@ class TodoToolTest(unittest.TestCase):
         def names():
             return [i["name"] for i in self.tool.act_board({})["lists"]]
 
-        self.assertEqual(names(), ["任务", "甲", "乙", "丙"])
+        self.assertEqual(names(), ["甲", "乙", "丙", "未分类"])
 
         self.tool.act_reorder_lists({"ids": [third["id"], first["id"], second["id"]]})
-        self.assertEqual(names(), ["任务", "丙", "甲", "乙"])
+        self.assertEqual(names(), ["丙", "甲", "乙", "未分类"])
 
-        # 默认清单永远第一，塞进去也不参与排序
+        # 默认清单永远排最后，塞进去也不参与排序
         self.tool.act_reorder_lists(
             {"ids": [model.DEFAULT_LIST_ID, second["id"], third["id"], first["id"]]})
-        self.assertEqual(names(), ["任务", "乙", "丙", "甲"])
+        self.assertEqual(names(), ["乙", "丙", "甲", "未分类"])
 
         # 没提到的清单按原相对顺序接在后面（前端顺序过期时也不会乱）
         self.tool.act_reorder_lists({"ids": [first["id"]]})
-        self.assertEqual(names(), ["任务", "甲", "乙", "丙"])
+        self.assertEqual(names(), ["甲", "乙", "丙", "未分类"])
 
         # 不存在的 id 直接忽略，不报错
         self.tool.act_reorder_lists({"ids": ["不存在", second["id"]]})
-        self.assertEqual(names(), ["任务", "乙", "甲", "丙"])
+        self.assertEqual(names(), ["乙", "甲", "丙", "未分类"])
 
         with self.assertRaises(ToolError):
             self.tool.act_reorder_lists({"ids": "不是列表"})
@@ -836,7 +842,7 @@ class TodoToolTest(unittest.TestCase):
 
         fresh = TodoTool()
         self.assertEqual([i["name"] for i in fresh.act_board({})["lists"]],
-                         ["任务", "乙", "甲"])
+                         ["乙", "甲", "未分类"])
 
     def test_unknown_task_id(self):
         with self.assertRaises(ToolError):
@@ -854,7 +860,7 @@ class TodoToolTest(unittest.TestCase):
         self.assertEqual(tasks[0]["title"], "重启后还在")
         self.assertEqual(tasks[0]["steps"][0]["title"], "步骤一")
         self.assertEqual([i["name"] for i in board["lists"]],
-                         [model.DEFAULT_LIST_NAME, "工作"])
+                         ["工作", model.DEFAULT_LIST_NAME])
 
     def test_missing_file_returns_empty(self):
         data = store.load()
