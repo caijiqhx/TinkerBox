@@ -901,10 +901,14 @@
       pickBtn.textContent = state.picking ? "退出多选" : "多选";
     }
 
-    if (addInput) { addInput.style.display = state.picking ? "none" : ""; }
+    if (addInput) {
+      addInput.style.display =
+        (state.picking || state.view === "completed" || state.view === "trash")
+          ? "none"
+          : "";
+    }
     bulkBox.style.display = state.picking ? "" : "none";
     renderShellClass();
-    if (!state.picking) { return; }
 
     var count = state.picked.length;
     var on = count > 0;

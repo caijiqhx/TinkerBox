@@ -75,6 +75,13 @@ class TodoToolTest(unittest.TestCase):
         self.assertEqual(planned["title"], "C")
         self.assertEqual(planned["due"], _today(0))
 
+    def test_add_rejected_in_history_views(self):
+        """已完成 / 回收站是"看历史"的视图：往里加任务不会出现在列表里，
+        用户会以为没加上。转到这两个视图添加必须被拒绝。"""
+        for view in ("completed", "trash"):
+            with self.assertRaises(ToolError):
+                self.tool.act_add({"title": "看不到的任务", "view": view})
+
     def test_my_day_only_shows_today(self):
         task = self.tool.act_add({"title": "今天的事"})["task"]
         self.assertEqual(self.tool.act_board({"view": "my_day"})["shown"], 0)

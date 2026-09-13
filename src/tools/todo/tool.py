@@ -286,6 +286,11 @@ class TodoTool(Tool):
         data = store.load()
         view = str(payload.get("view") or "").strip()
 
+        # 已完成 / 回收站是"看历史"的视图：往里添加的任务不会出现在当前列表里，
+        # 用户会以为没加上（任务其实加进了默认清单）。直接拒绝，把错误说清楚。
+        if view in (model.VIEW_COMPLETED, model.VIEW_TRASH):
+            raise ToolError("这个视图是看历史的，不能在这里添加任务，请切换到其他视图")
+
         list_id = str(payload.get("list_id") or model.DEFAULT_LIST_ID).strip()
         if self._find_list(data["lists"], list_id) is None:
             list_id = model.DEFAULT_LIST_ID
