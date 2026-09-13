@@ -506,6 +506,54 @@ class TodoToolTest(unittest.TestCase):
         self.assertEqual([t["title"] for t in trash], ["有效"])
         self.assertTrue(trash[0]["deleted_at"])       # 缺时间戳的按"刚删"补上
 
+    def test_reorder_lists(self):
+        first = self.tool.act_add_list({"name": "甲"})["list"]
+        second = self.tool.act_add_list({"name": "乙"})["list"]
+        third = self.tool.act_add_list({"name": "丙"})["list"]
+
+        def names():
+            return [i["name"] for i in self.tool.act_board({})["lists"]]
+
+        self.assertEqual(names(), ["任务", "甲", "乙", "丙"])
+
+        self.tool.act_reorder_lists({"ids": [third["id"], first["id"], second["id"]]})
+        self.assertEqual(names(), ["任务", "丙", "甲", "乙"])
+
+        # 默认清单永远第一，塞进去也不参与排序
+        self.tool.act_reorder_lists(
+            {"ids": [model.DEFAULT_LIST_ID, second["id"], third["id"], first["id"]]})
+        self.assertEqual(names(), ["任务", "乙", "丙", "甲"])
+
+        # 没提到的清单按原相对顺序接在后面（前端顺序过期时也不会乱）
+        self.tool.act_reorder_lists({"ids": [first["id"]]})
+        self.assertEqual(names(), ["任务", "甲", "乙", "丙"])
+
+        # 不存在的 id 直接忽略，不报错
+        self.tool.act_reorder_lists({"ids": ["不存在", second["id"]]})
+        self.assertEqual(names(), ["任务", "乙", "甲", "丙"])
+
+        with self.assertRaises(ToolError):
+            self.tool.act_reorder_lists({"ids": "不是列表"})
+
+    def test_reorder_keeps_tasks_in_their_lists(self):
+        first = self.tool.act_add_list({"name": "甲"})["list"]
+        second = self.tool.act_add_list({"name": "乙"})["list"]
+        task = self.tool.act_add({"title": "在甲里", "list_id": first["id"]})["task"]
+
+        self.tool.act_reorder_lists({"ids": [second["id"], first["id"]]})
+        stored = self.tool.act_board({"view": "list", "list_id": first["id"]})
+        self.assertEqual([t["id"] for g in stored["groups"] for t in g["tasks"]],
+                         [task["id"]])
+
+    def test_reorder_survives_restart(self):
+        first = self.tool.act_add_list({"name": "甲"})["list"]
+        second = self.tool.act_add_list({"name": "乙"})["list"]
+        self.tool.act_reorder_lists({"ids": [second["id"], first["id"]]})
+
+        fresh = TodoTool()
+        self.assertEqual([i["name"] for i in fresh.act_board({})["lists"]],
+                         ["任务", "乙", "甲"])
+
     def test_unknown_task_id(self):
         with self.assertRaises(ToolError):
             self.tool.act_toggle({"id": "not-exist"})

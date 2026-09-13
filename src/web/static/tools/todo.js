@@ -25,7 +25,8 @@
     board: null,
     selected: null,
     stepDraft: "",
-    renaming: false        /* 刚建完清单：下一次渲染要把标题输入框聚焦起来 */
+    renaming: false,       /* 刚建完清单：下一次渲染要把标题输入框聚焦起来 */
+    dragListId: null       /* 正在被拖动的清单 id */
   };
 
   var VIEW_META = {
@@ -190,17 +191,38 @@
     /* 用 div 而不是 button：条目里还要放「删除清单」按钮，
        而 button 嵌套 button 是非法 HTML，浏览器会自动闭合外层标签，
        导致整个左栏结构错乱。 */
-    var item = el("div", {
+    var attrs = {
       class: "rail-item" + (options.active ? " active" : ""),
       title: options.title || options.label,
       onclick: options.onclick
-    }, [
+    };
+    if (options.drag) {
+      attrs.draggable = "true";
+      attrs.ondragstart = options.drag.start;
+      attrs.ondragover = options.drag.over;
+      attrs.ondragleave = options.drag.leave;
+      attrs.ondrop = options.drag.drop;
+      attrs.ondragend = options.drag.end;
+    }
+
+    var item = el("div", attrs, [
       el("span", { class: "rail-ico", text: options.icon || "" }),
       el("span", { class: "rail-label", text: options.label })
     ]);
 
     if (options.count) {
       item.appendChild(el("span", { class: "rail-count", text: String(options.count) }));
+    }
+    if (options.onPin) {
+      item.appendChild(el("button", {
+        class: "rail-mini pin",
+        text: "↑",
+        title: "置顶（移到最前）",
+        onclick: function (event) {
+          event.stopPropagation();
+          options.onPin();
+        }
+      }));
     }
     if (options.onRemove) {
       item.appendChild(el("button", {
@@ -214,6 +236,85 @@
       }));
     }
     return item;
+  }
+
+  /* ---------------- 清单拖拽排序 ----------------
+     两个 HTML5 的硬性要求，少写一个就会出现"在某个浏览器里完全拖不动"：
+     ① dragstart 里必须 setData —— 否则 Firefox 不认为这是一次有效拖拽；
+     ② dragover 里必须 preventDefault —— 否则 drop 事件根本不会触发。 */
+  function setDropHint(node, on) {
+    if (!node || typeof node.className !== "string") { return; }
+    var base = node.className.replace(/\s*drag-over/g, "");
+    node.className = on ? (base + " drag-over") : base;
+  }
+
+  function clearDropHints() {
+    if (!railBox) { return; }
+    for (var i = 0; i < railBox.children.length; i++) {
+      setDropHint(railBox.children[i], false);
+    }
+  }
+
+  function listDragStart(event, item) {
+    state.dragListId = item.id;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", item.id);
+    }
+    setDropHint(this, false);
+    this.className = this.className + " dragging";
+  }
+
+  function listDragOver(event, item) {
+    if (!state.dragListId || state.dragListId === item.id) { return; }
+    event.preventDefault();                    // 不写这句就不会有 drop
+    if (event.dataTransfer) { event.dataTransfer.dropEffect = "move"; }
+    setDropHint(this, true);
+  }
+
+  function listDragEnd() {
+    state.dragListId = null;
+    clearDropHints();
+  }
+
+  function listDrop(event, target) {
+    event.preventDefault();
+    var dragged = state.dragListId;
+    var node = this;
+    listDragEnd();
+    if (!dragged || dragged === target.id) { return; }
+
+    var ids = [];
+    var lists = (state.board && state.board.lists) || [];
+    for (var i = 0; i < lists.length; i++) {
+      if (lists[i].id !== "default") { ids.push(lists[i].id); }
+    }
+    var from = ids.indexOf(dragged);
+    if (from < 0) { return; }
+    ids.splice(from, 1);
+
+    var to = ids.indexOf(target.id);
+    if (to < 0) { to = ids.length; }
+
+    // 落在目标的上半还是下半，决定插到它前面还是后面 —— 跟直觉一致
+    var after = false;
+    if (typeof event.clientY === "number" && node.getBoundingClientRect) {
+      var box = node.getBoundingClientRect();
+      after = event.clientY > (box.top + box.height / 2);
+    }
+    ids.splice(after ? to + 1 : to, 0, dragged);
+
+    act("reorder_lists", { ids: ids });
+  }
+
+  function listDragHandlers(item) {
+    return {
+      start: function (event) { listDragStart.call(this, event, item); },
+      over: function (event) { listDragOver.call(this, event, item); },
+      leave: function () { setDropHint(this, false); },
+      drop: function (event) { listDrop.call(this, event, item); },
+      end: listDragEnd
+    };
   }
 
   function goView(view) {
@@ -261,14 +362,19 @@
     for (var n = 0; n < lists.length; n++) {
       (function (item) {
         var isDefault = item.id === "default";
+        // 已经在最前面的清单不需要"置顶"（lists[0] 是默认清单，所以比的是 n > 1）
+        var alreadyFirst = (n === 1);
         railBox.appendChild(railItem({
           icon: isDefault ? "▤" : "•",
           label: item.name,
           count: item.count || 0,
           active: state.view === "list" && state.listId === item.id,
-          title: item.name,
+          title: isDefault ? item.name : item.name + "（可拖动调整顺序）",
           onclick: function () { goList(item.id); },
-          onRemove: isDefault ? null : function () { removeList(item); }
+          onPin: (isDefault || alreadyFirst) ? null : function () { pinList(item); },
+          onRemove: isDefault ? null : function () { removeList(item); },
+          // 默认清单固定第一，不参与拖拽
+          drag: isDefault ? null : listDragHandlers(item)
         }));
       })(lists[n]);
     }
@@ -310,6 +416,18 @@
     }).catch(function (err) {
       ctx.toast(err.message, true);
     });
+  }
+
+  /* 置顶 = 把这个清单挪到自定义清单的最前面。
+     复用已有的 reorder_lists —— 不必为它新增后端接口。 */
+  function pinList(item) {
+    var ids = [];
+    var lists = (state.board && state.board.lists) || [];
+    for (var i = 0; i < lists.length; i++) {
+      if (lists[i].id !== "default" && lists[i].id !== item.id) { ids.push(lists[i].id); }
+    }
+    ids.unshift(item.id);
+    act("reorder_lists", { ids: ids });
   }
 
   function removeList(item) {
@@ -971,6 +1089,7 @@
     state.selected = null;
     state.stepDraft = "";
     state.renaming = false;
+    state.dragListId = null;
 
     shell = el("div", { class: "todo-shell without-detail" });
     railBox = el("div", { class: "rail" });

@@ -493,6 +493,14 @@ body {
   font-weight: 600;
 }
 
+/* 清单拖拽排序 */
+.rail-item.dragging { opacity: .4; }
+.rail-item.drag-over {
+  background: var(--accent-bg);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 .rail-ico { width: 16px; flex: 0 0 16px; text-align: center; }
 
 .rail-label {
@@ -521,7 +529,7 @@ body {
   color: var(--text-mute);
   font: inherit;
   font-size: 11px;
-  padding: 0 4px;
+  padding: 0 3px;
   border-radius: 4px;
   cursor: pointer;
   opacity: 0;
@@ -529,6 +537,8 @@ body {
 
 .rail-item:hover .rail-mini { opacity: 1; }
 .rail-mini:hover { color: var(--danger); }
+/* 「置顶」不是破坏性操作，别用红色 */
+.rail-mini.pin:hover { color: var(--accent); }
 
 /* ---------------- 中间列表 ---------------- */
 

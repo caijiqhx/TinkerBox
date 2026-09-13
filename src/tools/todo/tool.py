@@ -479,6 +479,38 @@ class TodoTool(Tool):
         self._persist(data)
         return {"list": item}
 
+    def act_reorder_lists(self, payload):
+        """按给定顺序重排**自定义**清单。
+
+        只接受"要排在前面的那批 id"，其余按原相对顺序接在后面 ——
+        这样即使前端传来的顺序已经过期（比如别处刚建/删了一个清单），也不会出错。
+        默认清单永远排第一，不参与排序。
+        """
+        data = store.load()
+        raw = payload.get("ids")
+        if not isinstance(raw, (list, tuple)):
+            raise ToolError("ids 必须是列表")
+
+        wanted = []
+        for value in raw:
+            key = str(value or "").strip()
+            if key and key != model.DEFAULT_LIST_ID and key not in wanted:
+                wanted.append(key)
+
+        ordered = []
+        for key in wanted:
+            item = self._find_list(data["lists"], key)
+            if item is not None:
+                ordered.append(item)
+        for item in data["lists"]:
+            if item["id"] != model.DEFAULT_LIST_ID and item not in ordered:
+                ordered.append(item)
+
+        for index, item in enumerate(ordered, start=1):
+            item["order"] = index
+        self._persist(data)
+        return {"lists": self._lists_with_counts(ordered, data["tasks"])}
+
     def act_remove_list(self, payload):
         """删除清单；其中的任务移回默认清单，避免误删数据。"""
         data = store.load()
@@ -566,6 +598,7 @@ class TodoTool(Tool):
             "remove_step": self.act_remove_step,
             "add_list": self.act_add_list,
             "rename_list": self.act_rename_list,
+            "reorder_lists": self.act_reorder_lists,
             "remove_list": self.act_remove_list,
             "restore": self.act_restore,
             "purge": self.act_purge,
