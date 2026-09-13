@@ -31,12 +31,30 @@
     picked: []             /* 多选模式下已勾选的任务 id（按勾选先后） */
   };
 
+  /* 内联 SVG 图标（stroke 精确控粗细，currentColor 跟随主题色，
+     不依赖系统字体 —— 目标机 aarch64 UOS 的字体环境不可控）。
+     每项为可换色的 SVG outerHTML，用于左栏图标、行内操作按钮等。 */
+  var ICONS = {
+    /* 清单线条图标：正面三横线代表条目，描实的一端代表清单本身 */
+    list:   '<svg viewBox="0 0 16 16" class="ic" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3.5h10"/><path d="M3 8h10"/><path d="M3 12.5h7"/></svg>',
+    /* 置顶：粗箭头，强调性强（它是快捷操作，需要一眼可见） */
+    pin:    '<svg viewBox="0 0 16 16" class="ic" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v9"/><path d="M4.5 6.5 8 3l3.5 3.5"/></svg>',
+    /* 删除：粗 X，破坏性操作，醒目 */
+    close:  '<svg viewBox="0 0 16 16" class="ic" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4.5 4.5l7 7"/><path d="M11.5 4.5l-7 7"/></svg>',
+    /* 粗对号：用于「已完成」视图 */
+    check:  '<svg viewBox="0 0 16 16" class="ic" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 5"/></svg>',
+    /* 小结（未分类清单/任务行分隔）：加粗实点 */
+    dot:    '<svg viewBox="0 0 16 16" class="ic" width="16" height="16"><circle cx="8" cy="8" r="2.6" fill="currentColor"/></svg>'
+  };
+
+  function iconSvg(name) { return ICONS[name] || ""; }
+
   var VIEW_META = {
     all:       { icon: "▦", label: "任务" },
     my_day:    { icon: "☀", label: "我的一天" },
     important: { icon: "★", label: "重要" },
     planned:   { icon: "◷", label: "已计划" },
-    completed: { icon: "✓", label: "已完成" },
+    completed: { icon: "✓", label: "已完成", iconHtml: iconSvg("check") },
     trash:     { icon: "♻", label: "回收站" }
   };
 
@@ -227,8 +245,14 @@
       attrs.ondragend = options.drag.end;
     }
 
+    var icoNode = el("span", { class: "rail-ico" });
+    if (options.iconHtml) {
+      icoNode.innerHTML = options.iconHtml;
+    } else {
+      icoNode.textContent = options.icon || "";
+    }
     var item = el("div", attrs, [
-      el("span", { class: "rail-ico", text: options.icon || "" }),
+      icoNode,
       el("span", { class: "rail-label", text: options.label })
     ]);
 
@@ -244,7 +268,7 @@
     if (options.onPin) {
       actions.push(el("button", {
         class: "rail-mini pin",
-        text: "↑",
+        html: iconSvg("pin"),
         title: "置顶（移到最前）",
         onclick: function (event) {
           event.stopPropagation();
@@ -255,7 +279,7 @@
     if (options.onRemove) {
       actions.push(el("button", {
         class: "rail-mini",
-        text: "✕",
+        html: iconSvg("close"),
         title: "删除清单",
         onclick: function (event) {
           event.stopPropagation();
@@ -390,6 +414,7 @@
       (function (key) {
         var meta = VIEW_META[key];
         railBox.appendChild(railItem({
+          iconHtml: meta.iconHtml || "",
           icon: meta.icon,
           label: meta.label,
           count: views[key] || 0,
@@ -409,6 +434,7 @@
         // 自定义清单中已经排在最前的那个不需要"置顶"。
         var alreadyFirst = !isDefault && (n === 0);
         railBox.appendChild(railItem({
+          iconHtml: iconSvg(isDefault ? "list" : "dot"),
           icon: isDefault ? "▤" : "•",
           label: item.name,
           count: item.count || 0,
@@ -427,7 +453,10 @@
       class: "rail-item",
       onclick: addList
     }, [
-      el("span", { class: "rail-ico", text: "+" }),
+      el("span", {
+        class: "rail-ico",
+        html: '<svg viewBox="0 0 16 16" class="ic" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 3.5v9"/><path d="M3.5 8h9"/></svg>'
+      }),
       el("span", { class: "rail-label", text: "新建清单" })
     ]));
 

@@ -535,7 +535,20 @@ body {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-.rail-ico { width: 16px; flex: 0 0 16px; text-align: center; }
+.rail-ico {
+  width: 16px;
+  flex: 0 0 16px;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* 图标 SVG 统一尺寸与垂直对齐（currentColor 自动跟随文字色） */
+.rail-ico .ic,
+.rail-mini .ic {
+  display: block;
+  vertical-align: middle;
+}
 
 .rail-label {
   flex: 1;
@@ -582,9 +595,13 @@ body {
   color: var(--text-mute);
   font: inherit;
   font-size: 11px;
-  padding: 0 3px;
+  padding: 2px 3px;
   border-radius: 4px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .rail-mini:hover { color: var(--danger); }
@@ -743,7 +760,11 @@ mark.hit {
   padding: 3px 6px;
   border-radius: 5px;
   font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+.ico-btn .ic { display: block; }
 
 .ico-btn:hover { background: var(--border-soft); color: var(--text); }
 .ico-btn.star-on { color: var(--warn); }
