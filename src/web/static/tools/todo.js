@@ -32,7 +32,7 @@
   };
 
   var VIEW_META = {
-    all:       { icon: "▦", label: "全部任务" },
+    all:       { icon: "▦", label: "任务" },
     my_day:    { icon: "☀", label: "我的一天" },
     important: { icon: "★", label: "重要" },
     planned:   { icon: "◷", label: "已计划" },
@@ -369,7 +369,10 @@
     var views = board.views || {};
     var lists = board.lists || [];
 
-    var order = ["my_day", "important", "planned", "all"];
+    /* 智能视图连排：我的一天 → 重要 → 已计划 → 已完成 → 任务，
+   按 时间性 → 重要性 → 完成态 → 全量 的次序，一眼扫完；
+   回收站单独沉底（它是"废弃区"，与常规视图性质不同）。 */
+    var order = ["my_day", "important", "planned", "completed", "all"];
     for (var i = 0; i < order.length; i++) {
       (function (key) {
         var meta = VIEW_META[key];
@@ -416,13 +419,6 @@
     ]));
 
     railBox.appendChild(el("div", { class: "rail-sep" }));
-    railBox.appendChild(railItem({
-      icon: VIEW_META.completed.icon,
-      label: VIEW_META.completed.label,
-      count: views.completed || 0,
-      active: state.view === "completed",
-      onclick: function () { goView("completed"); }
-    }));
     railBox.appendChild(railItem({
       icon: VIEW_META.trash.icon,
       label: VIEW_META.trash.label,
@@ -1375,7 +1371,7 @@
     searchInput = el("input", {
       class: "input",
       type: "text",
-      placeholder: "搜索全部任务",
+      placeholder: "搜索任务",
       style: "width:186px"
     });
     searchInput.addEventListener("input", function () {

@@ -539,7 +539,7 @@ class TodoToolTest(unittest.TestCase):
         self.assertEqual(titles, ["工作清单里的", "默认清单里的"])
         self.assertEqual(board["views"]["all"], 2)
 
-        # 完成的不算在"全部任务"里（那是「已完成」视图的事）
+        # 完成的不算在「任务」里（那是「已完成」视图的事）
         self.tool.act_toggle({"id": first["id"]})
         board = self.tool.act_board({"view": "all"})
         self.assertEqual([t["title"] for g in board["groups"] for t in g["tasks"]],
