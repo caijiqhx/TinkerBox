@@ -107,6 +107,128 @@ class TodoToolTest(unittest.TestCase):
         self.assertEqual(self.tool.act_board({"view": "completed"})["shown"], 0)
         self.assertEqual(self.tool.act_board({"view": "list"})["shown"], 1)
 
+    # ---------------------------------------------------------------- 重复任务（顺延）
+    def _make_repeat(self, title, repeat, due="", my_day=""):
+        task = self.tool.act_add({"title": title, "repeat": repeat})["task"]
+        if due or my_day:
+            fields = {}
+            if due:
+                fields["due"] = due
+            if my_day:
+                fields["my_day"] = my_day
+            self.tool.act_update({"id": task["id"], "fields": fields})
+        return task
+
+    def test_repeat_daily_defer_to_tomorrow(self):
+        task = self._make_repeat("喝水", "daily", due=_today(0))
+        result = self.tool.act_toggle({"id": task["id"]})
+
+        self.assertEqual(result["deferred_to"], _today(1))
+        self.assertEqual(result["task"]["status"], "todo")
+        # 重复任务永不进已完成视图
+        self.assertEqual(self.tool.act_board({"view": "completed"})["shown"], 0)
+        # 仍然在已计划里，归到「明天」组
+        groups = self.tool.act_board({"view": "planned"})["groups"]
+        self.assertIn("明天", [g["label"] for g in groups])
+
+    def test_repeat_never_shows_in_completed_view(self):
+        # 无论完成多少次，重复任务始终是未完成，不进已完成视图
+        task = self._make_repeat("周例会", "weekly", due=_today(0))
+        self.tool.act_toggle({"id": task["id"]})
+        self.tool.act_toggle({"id": task["id"]})
+        self.assertEqual(self.tool.act_board({"view": "completed"})["shown"], 0)
+        self.assertEqual(self.tool.act_board({"view": "planned"})["shown"], 1)
+
+    def test_repeat_without_due_anchors_to_today(self):
+        # "每天喝水"没有到期日：完成时自动补 due = 今天 + 一周期
+        task = self._make_repeat("喝水", "monthly")
+        result = self.tool.act_toggle({"id": task["id"]})
+        self.assertEqual(result["task"]["due"],
+                         model.advance_date(datetime.date.today(), "monthly").isoformat())
+
+    def test_repeat_advance_crosses_month_boundary(self):
+        # 1月31日 + 每月 → 2月28/29，而不是 3月3日
+        self.assertEqual(
+            model.advance_date(datetime.date(2026, 1, 31), "monthly"),
+            datetime.date(2026, 2, 28))
+        self.assertEqual(
+            model.advance_date(datetime.date(2024, 1, 31), "monthly"),
+            datetime.date(2024, 2, 29))          # 闰年
+        # 每周固定 +7 天
+        self.assertEqual(
+            model.advance_date(datetime.date(2026, 9, 13), "weekly"),
+            datetime.date(2026, 9, 20))
+
+    def test_repeat_resets_steps_on_defer(self):
+        task = self._make_repeat("健身", "daily", due=_today(0))
+        added = self.tool.act_add_step({"id": task["id"], "title": "深蹲"})
+        step_id = added["step"]["id"]
+        self.tool.act_toggle_step({"id": task["id"], "step_id": step_id})
+        self.assertTrue(store.load()["tasks"][0]["steps"][0]["done"])
+
+        self.tool.act_toggle({"id": task["id"]})
+        self.assertFalse(store.load()["tasks"][0]["steps"][0]["done"])
+
+    def test_repeat_my_day_defers_to_next_period(self):
+        task = self._make_repeat("日报", "daily", due="", my_day=_today(0))
+        result = self.tool.act_toggle({"id": task["id"]})
+        self.assertEqual(result["task"]["my_day"], _today(1))
+        # 今天不再出现在「我的一天」
+        self.assertEqual(self.tool.act_board({"view": "my_day"})["shown"], 0)
+
+    def test_repeat_cancel_toggle_is_pure_restore(self):
+        # 普通任务：取消完成（done→todo）就是单纯恢复，没有任何顺延副作用
+        task = self.tool.act_add({"title": "普通任务"})["task"]
+        self.tool.act_toggle({"id": task["id"]})          # done
+        self.tool.act_toggle({"id": task["id"]})          # 取消完成
+        reloaded = store.load()["tasks"][0]
+        self.assertEqual(reloaded["status"], "todo")
+        # 重复任务本身永远到不了 done 状态，toggle 只有"完成→顺延"一个方向
+        repeat = self._make_repeat("每日打卡", "daily", due=_today(0))
+        self.tool.act_toggle({"id": repeat["id"]})
+        self.tool.act_toggle({"id": repeat["id"]})
+        self.assertEqual(store.load()["tasks"][1]["status"], "todo")
+
+    def test_repeat_early_completion_keeps_due_anchor(self):
+        # 提前完成：due 还在未来（下周），顺延应从 due 推，不改变原计划节奏
+        task = self._make_repeat("例会", "weekly", due=_today(7))
+        self.tool.act_toggle({"id": task["id"]})
+        self.assertEqual(store.load()["tasks"][0]["due"], _today(14))
+
+    def test_repeat_bulk_done_defers_too(self):
+        # 批量完成对重复任务同样顺延（与单条勾选一致，否则批量操作会把
+        # 重复任务"真正完成"，破坏"永不进已完成视图"的不变式）
+        task = self._make_repeat("喝水", "daily", due=_today(0))
+        result = self.tool.act_bulk({
+            "ids": [task["id"]], "op": "done", "value": True})
+        self.assertEqual(result["changed"], 1)
+        self.assertEqual(store.load()["tasks"][0]["status"], "todo")
+        self.assertEqual(store.load()["tasks"][0]["due"], _today(1))
+        self.assertEqual(self.tool.act_board({"view": "completed"})["shown"], 0)
+
+    def test_update_status_done_defers_repeat(self):
+        # update 直接改 status=done 与勾选走同一路径：重复任务顺延而非完成
+        task = self._make_repeat("周报", "weekly", due=_today(0))
+        self.tool.act_update({"id": task["id"], "fields": {"status": "done"}})
+        reloaded = store.load()["tasks"][0]
+        self.assertEqual(reloaded["status"], "todo")
+        self.assertEqual(reloaded["due"], _today(7))
+        self.assertEqual(self.tool.act_board({"view": "completed"})["shown"], 0)
+
+    def test_repeat_normalize_handles_bad_input(self):
+        self.assertEqual(model.normalize_repeat(""), "none")
+        self.assertEqual(model.normalize_repeat("DAILY"), "daily")
+        self.assertEqual(model.normalize_repeat("每周"), "none")     # 非法的回落
+        self.assertEqual(model.normalize_repeat("monthly"), "monthly")
+
+    def test_repeat_roundtrip_through_store(self):
+        task = self._make_repeat("打卡", "daily", due=_today(0))
+        # 模拟重载：save/load 一遭后 repeat 字段仍在
+        data = store.load()
+        store.save(data)
+        reloaded = store.load()["tasks"][0]
+        self.assertEqual(reloaded["repeat"], "daily")
+
     def test_view_counts(self):
         a = self.tool.act_add({"title": "A"})["task"]
         b = self.tool.act_add({"title": "B"})["task"]

@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import calendar
 import datetime
 import uuid
 
@@ -25,6 +26,21 @@ from core.errors import ToolError
 STATUS_TODO = "todo"
 STATUS_DONE = "done"
 STATUSES = (STATUS_TODO, STATUS_DONE)
+
+#: 重复周期。none = 不重复（默认）
+REPEAT_NONE = "none"
+REPEAT_DAILY = "daily"
+REPEAT_WEEKLY = "weekly"
+REPEAT_MONTHLY = "monthly"
+REPEATS = (REPEAT_NONE, REPEAT_DAILY, REPEAT_WEEKLY, REPEAT_MONTHLY)
+
+#: 界面上给用户看的周期名
+REPEAT_LABELS = {
+    REPEAT_NONE: "不重复",
+    REPEAT_DAILY: "每天",
+    REPEAT_WEEKLY: "每周",
+    REPEAT_MONTHLY: "每月",
+}
 
 DEFAULT_LIST_ID = "default"
 DEFAULT_LIST_NAME = "任务"
@@ -154,6 +170,72 @@ def as_bool(value):
     return bool(value)
 
 
+# ---------------------------------------------------------------- 重复周期
+
+
+def normalize_repeat(value):
+    """把任意输入规范成 repeat 取值；非法一律回落为"不重复"。"""
+    text = str(value or "").strip().lower()
+    if text not in REPEATS:
+        return REPEAT_NONE
+    return text
+
+
+def advance_date(day, repeat):
+    """把日期推后一个周期。
+
+    月末防溢出：1月31日 + 每月 → 2月28/29日，而不是 3月3日。
+    这比"直接加 31 天"更符合直觉 —— 用户要的是"下个月的这一天"。
+    """
+    day = day or datetime.date.today()
+    if repeat == REPEAT_DAILY:
+        return day + datetime.timedelta(days=1)
+    if repeat == REPEAT_WEEKLY:
+        return day + datetime.timedelta(days=7)
+    if repeat == REPEAT_MONTHLY:
+        year = day.year + (day.month // 12)
+        month = (day.month % 12) + 1
+        last = calendar.monthrange(year, month)[1]
+        return datetime.date(year, month, min(day.day, last))
+    return day
+
+
+def defer_repeat(task, today=None):
+    """把重复任务"顺延"到下一周期，返回顺延后的任务。
+
+    完成一个重复任务时调用：不生成新卡、卡片本身循环使用。
+    规则（全部在同一处，避免口径漂移）：
+    - 锚点：有 due 且 due >= 今天（还没到计划日）→ 从 **due** 推一周期。
+      提前完成（如周一做完周五的例会）不应改变下次计划日期；
+      due 已过期 → 从**今天**推，让它补上进度而不是越拖越远；
+      没有 due 的重复任务（"每天喝水"）→ 从今天推并补一个 due，
+      否则它没有"下次哪天"可言，顺延就失去意义；
+    - my_day 同向推一周期（基准取今天）：例行任务做完了，
+      下一周期自动回到"我的一天"；my_day 永为"今天"或过期值，取今天最干净；
+    - 步骤重置为未勾选、状态回未完成 —— 每个周期重新打卡。
+    """
+    today = today or datetime.date.today()
+    repeat = normalize_repeat(task.get("repeat"))
+    if repeat == REPEAT_NONE:
+        return task
+
+    due = parse_date(task.get("due"))
+    if due is not None and due >= today:
+        anchor = due
+    else:
+        anchor = today
+    task["due"] = advance_date(anchor, repeat).isoformat()
+
+    if task.get("my_day"):
+        task["my_day"] = advance_date(today, repeat).isoformat()
+    task["status"] = STATUS_TODO
+    task["done_at"] = ""
+    for step in task.get("steps") or []:
+        step["done"] = False
+    task["updated"] = now_text()
+    return task
+
+
 # ---------------------------------------------------------------- 构造
 
 
@@ -191,7 +273,8 @@ def make_step(title):
 
 
 def make_task(title, list_id=DEFAULT_LIST_ID, important=False,
-              my_day="", due="", note="", tags=None, status=STATUS_TODO):
+              my_day="", due="", note="", tags=None, status=STATUS_TODO,
+              repeat=REPEAT_NONE):
     stamp = now_text()
     return {
         "id": uuid.uuid4().hex[:12],
@@ -201,6 +284,7 @@ def make_task(title, list_id=DEFAULT_LIST_ID, important=False,
         "important": as_bool(important),
         "my_day": normalize_date(my_day),
         "due": normalize_date(due),
+        "repeat": normalize_repeat(repeat),
         "note": str(note or "").strip(),
         "steps": [],
         "tags": normalize_tags(tags),
@@ -284,6 +368,7 @@ def normalize_task(item, valid_list_ids=None):
         "important": as_bool(item.get("important")),
         "my_day": normalize_date(item.get("my_day")),
         "due": normalize_date(item.get("due")),
+        "repeat": normalize_repeat(item.get("repeat")),
         "note": str(item.get("note") or ""),
         "steps": steps,
         "tags": tags,

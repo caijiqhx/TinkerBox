@@ -88,6 +88,17 @@
     return !!task.my_day && task.my_day === isoToday();
   }
 
+  var REPEAT_LABELS = { none: "", daily: "每天", weekly: "每周", monthly: "每月" };
+  function repeatChip(task) {
+    var label = REPEAT_LABELS[task.repeat] || "";
+    if (!label) { return null; }
+    return el("span", {
+      class: "chip repeat",
+      text: "↻ " + label,
+      title: "重复任务：完成后自动顺延到下一周期"
+    });
+  }
+
   /* 把命中的关键词拆成 <mark>。只用于展示，拼接一律走 textContent。 */
   function highlight(text, keyword) {
     var raw = String(text || "");
@@ -180,6 +191,11 @@
     return ctx.callTool("todo", action, payload).then(function (data) {
       if (data && data.task && state.selected && data.task.id === state.selected.id) {
         state.selected = data.task;
+      }
+      // 重复任务"完成"即顺延：卡片回到未完成，必须明确告诉用户它去哪了，
+      // 否则勾掉后没看到任何变化，会以为没勾上
+      if (data && data.deferred_to) {
+        ctx.toast("已完成，顺延到 " + data.deferred_to);
       }
       return refresh();
     }).catch(function (err) {
@@ -633,6 +649,8 @@
     if (inMyDay(task) && state.view !== "my_day") {
       meta.appendChild(el("span", { class: "chip", text: "☀" }));
     }
+    var repeat = repeatChip(task);
+    if (repeat) { meta.appendChild(repeat); }
     var progress = progressChip(task);
     if (progress) { meta.appendChild(progress); }
     var due = dueChip(task);
@@ -1111,6 +1129,32 @@
       el("div", { class: "detail-label" }, [el("span", { text: "标签" })]),
       tagRow,
       tagInput
+    ]));
+
+    /* --- 重复 --- */
+    var repeatSelect = el("select", { class: "select" });
+    var REPEAT_CHOICES = [
+      { value: "none", label: "不重复" },
+      { value: "daily", label: "每天" },
+      { value: "weekly", label: "每周" },
+      { value: "monthly", label: "每月" }
+    ];
+    for (var rp = 0; rp < REPEAT_CHOICES.length; rp++) {
+      (function (choice) {
+        var option = el("option", { value: choice.value, text: choice.label });
+        repeatSelect.appendChild(option);
+      })(REPEAT_CHOICES[rp]);
+    }
+    repeatSelect.value = task.repeat || "none";
+    repeatSelect.addEventListener("change", function () {
+      act("update", { id: task.id, fields: { repeat: repeatSelect.value } });
+    });
+    detailBox.appendChild(el("div", { class: "detail-sec" }, [
+      el("div", {
+        class: "detail-label",
+        title: "完成时自动把任务顺延到下一周期，不生成新卡片"
+      }, [el("span", { text: "重复" })]),
+      el("div", { class: "detail-row" }, [repeatSelect])
     ]));
 
     /* --- 到期日 --- */

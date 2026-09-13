@@ -18,7 +18,8 @@ from core.tool import Tool, ToolMeta
 from tools.todo import model, store
 
 #: 可被 update 修改的字段
-UPDATABLE = ("title", "note", "due", "my_day", "important", "list_id", "tags", "status")
+UPDATABLE = ("title", "note", "due", "my_day", "important", "list_id", "tags",
+             "status", "repeat")
 
 #: 批量操作支持的动作（值都表示"设成什么"，而不是"切换" ——
 #: 一批任务里有的已完成有的没完成时，"切换"的语义是不确定的）
@@ -227,6 +228,21 @@ class TodoTool(Tool):
         task["done_at"] = model.now_text() if status == model.STATUS_DONE else ""
 
     @staticmethod
+    def _complete(task):
+        """完成一条任务。所有完成路径（单条勾选 / 批量完成 / update status）都走这里。
+
+        重复任务"完成"即顺延：不生成新卡、卡片回到未完成、到期日推到下一周期
+        （defer_repeat 内部已处理 due/my_day/步骤重置/状态回滚）。
+        普通任务才真正标记为已完成 —— 这样重复任务永远不会出现在「已完成」视图。
+        返回 True 表示发生了顺延（调用方据此决定要不要给用户反馈）。
+        """
+        if model.normalize_repeat(task.get("repeat")) != model.REPEAT_NONE:
+            model.defer_repeat(task)
+            return True
+        TodoTool._set_status(task, model.STATUS_DONE)
+        return False
+
+    @staticmethod
     def _touch(task):
         task["updated"] = model.now_text()
 
@@ -295,7 +311,9 @@ class TodoTool(Tool):
         if self._find_list(data["lists"], list_id) is None:
             list_id = model.DEFAULT_LIST_ID
 
-        extra = {}
+        extra = {
+            "repeat": model.normalize_repeat(payload.get("repeat")),
+        }
         if view == model.VIEW_MY_DAY:
             extra["my_day"] = model.today_text()
         elif view == model.VIEW_IMPORTANT:
@@ -328,6 +346,8 @@ class TodoTool(Tool):
             task["note"] = str(fields.get("note") or "").strip()
         if "due" in fields:
             task["due"] = model.normalize_date(fields.get("due"))
+        if "repeat" in fields:
+            task["repeat"] = model.normalize_repeat(fields.get("repeat"))
         if "my_day" in fields:
             task["my_day"] = model.normalize_date(fields.get("my_day"))
         if "important" in fields:
@@ -340,7 +360,12 @@ class TodoTool(Tool):
                 raise ToolError("清单不存在：%s" % (wanted,))
             task["list_id"] = wanted
         if "status" in fields:
-            self._set_status(task, fields.get("status"))
+            wanted = str(fields.get("status") or "").strip()
+            if wanted == model.STATUS_DONE:
+                # 与勾选完成同一路径：重复任务在这里同样顺延，不会变成"已完成"
+                self._complete(task)
+            else:
+                self._set_status(task, wanted)
 
         self._touch(task)
         self._persist(data)
@@ -351,10 +376,22 @@ class TodoTool(Tool):
         task = self._find_task(data["tasks"], payload.get("id"))
         target = model.STATUS_TODO if task.get("status") == model.STATUS_DONE \
             else model.STATUS_DONE
-        self._set_status(task, target)
+
+        # 取消完成（done→todo）是**单纯恢复**，不顺延 —— 否则用户想撤销
+        # 一个误勾时，顺延会把任务日期推走，造成二次破坏。
+        deferred = None
+        if target == model.STATUS_TODO:
+            self._set_status(task, model.STATUS_TODO)
+        else:
+            deferred = self._complete(task) and task.get("due")
+
         self._touch(task)
         self._persist(data)
-        return {"task": task}
+        result = {"task": task}
+        if deferred:
+            # 顺延后卡片仍处于未完成，没有这个提示用户会以为没勾上
+            result["deferred_to"] = deferred
+        return result
 
     def act_toggle_important(self, payload):
         data = store.load()
@@ -463,7 +500,10 @@ class TodoTool(Tool):
             target = model.STATUS_DONE if want else model.STATUS_TODO
             for task in tasks:
                 if task.get("status") != target:
-                    self._set_status(task, target)
+                    if target == model.STATUS_DONE:
+                        self._complete(task)   # 重复任务批量完成也顺延，不进已完成
+                    else:
+                        self._set_status(task, target)
                     self._touch(task)
                     changed += 1
         elif op == "important":
