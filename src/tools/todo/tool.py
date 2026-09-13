@@ -714,15 +714,6 @@ class TodoTool(Tool):
         self._persist(data)
         return {"removed": removed}
 
-    # ==================================================================
-    def act_stats(self, payload):
-        data = store.load()
-        return {
-            "stats": self._stats(data["tasks"]),
-            "views": self._view_counts(data["tasks"]),
-            "store": store.path_text(),
-        }
-
     def actions(self):
         return {
             "board": self.act_board,
@@ -745,7 +736,6 @@ class TodoTool(Tool):
             "restore": self.act_restore,
             "purge": self.act_purge,
             "empty_trash": self.act_empty_trash,
-            "stats": self.act_stats,
         }
 
     # ==================================================================
