@@ -229,6 +229,17 @@
     }
   }
 
+  function cardIcon(tool) {
+    var span = el("span", { class: "card-icon" });
+    if (tool.icon_html) {
+      span.innerHTML = tool.icon_html;
+      span.classList.add("svg");
+    } else {
+      span.textContent = tool.icon || "◆";
+    }
+    return span;
+  }
+
   function renderHome() {
     var main = mainNode();
     clear(main);
@@ -246,7 +257,7 @@
           class: "card",
           onclick: function () { window.location.hash = "#/" + tool.id; }
         }, [
-          el("span", { class: "card-icon", text: tool.icon || "◆" }),
+          cardIcon(tool),
           el("div", { class: "card-name", text: tool.name }),
           el("div", { class: "card-desc", text: tool.desc || "" })
         ]));
