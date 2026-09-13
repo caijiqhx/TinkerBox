@@ -4,4 +4,7 @@
 业务逻辑一律不在这里出现。
 """
 
-__all__ = ["server", "router", "launcher", "doctor"]
+#: 身份标记 —— 用来确认"这个端口上跑的确实是 ToolBox"（见 instance.py）
+APP_TAG = "tinkerbox"
+
+__all__ = ["APP_TAG", "server", "router", "launcher", "doctor", "instance"]

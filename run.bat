@@ -19,32 +19,36 @@ if not defined PYEXE (
 
 if not defined PYEXE goto :nopython
 
-echo   Python   : %PYEXE%
+echo   Python : %PYEXE%
 call %PYEXE% --version
-echo   Folder   : %CD%
-echo   Starting : src\main.py %*
-echo.
-echo   ------------------------------------------
+echo   Folder : %CD%
 echo.
 
 set PYTHONUNBUFFERED=1
 
-call %PYEXE% src\main.py %*
+rem --detach: the real server runs in a detached process, so closing this
+rem console window will NOT stop it. This is what makes "keep alive" work.
+call %PYEXE% src\main.py --detach %*
 set "RC=%ERRORLEVEL%"
 
+if not "%RC%"=="0" goto :failed
+
+echo   ------------------------------------------
+echo   Done. You can close this window now.
+echo   ------------------------------------------
+if "%~1"=="" timeout /t 3 >nul 2>nul
+exit /b 0
+
+:failed
 echo.
 echo   ------------------------------------------
-echo   ToolBox exited (code %RC%).
-goto :end
+echo   Startup FAILED (code %RC%). Read the message above.
+echo   ------------------------------------------
+if "%~1"=="" pause
+exit /b %RC%
 
 :nopython
 echo   [ERROR] Python 3 was not found on PATH.
 echo   Install Python 3 first, then run this file again.
-set "RC=1"
-
-:end
-echo.
-rem Pause only when double-clicked (no arguments) AND something failed,
-rem so the window stays open long enough to read the error.
-if not "%RC%"=="0" if "%~1"=="" pause
-exit /b %RC%
+if "%~1"=="" pause
+exit /b 1

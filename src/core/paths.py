@@ -62,6 +62,15 @@ def state_file():
     return data_dir() / "todo.json"
 
 
+def server_file():
+    """服务实例的运行信息（端口、pid、实例标识）。
+
+    「点图标」时先读它，再向那个端口探测确认是不是自己的服务 ——
+    这样重复点图标不会起第二个服务。
+    """
+    return data_dir() / "server.json"
+
+
 def config_file():
     return data_dir() / "config.json"
 

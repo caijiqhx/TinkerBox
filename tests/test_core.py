@@ -158,6 +158,12 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.get("ui"), "web")
         self.assertEqual(config.get("theme"), "auto")
 
+    def test_lifecycle_defaults(self):
+        """常驻模式相关默认值 —— 改这些会影响"一天只启动一次"的行为。"""
+        self.assertEqual(config.get("port"), 8765)
+        self.assertTrue(config.get("keep_alive"))
+        self.assertEqual(config.get("idle_exit_hours"), 12)
+
     def test_set_then_reload_persists(self):
         config.set_value("theme", "dark")
         config.reload()

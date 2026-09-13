@@ -92,6 +92,19 @@ def is_case_sensitive():
     return True
 
 
+def allow_address_reuse():
+    """绑定监听端口时是否启用地址复用（SO_REUSEADDR）。
+
+    POSIX：**启用**。它只影响 TIME_WAIT 的残留连接，能让服务在重启后立刻
+           重新绑定同一端口，不会与"端口已被占用"混淆。
+
+    Windows：**必须关闭**。Windows 的 SO_REUSEADDR 语义不同 —— 它允许两个
+           进程绑同一个端口，于是"端口被占用"根本检测不出来：我们会悄悄
+           绑上一个别人正在用的端口，而报错分支永远不会触发。
+    """
+    return not IS_WINDOWS
+
+
 def popen_detached(args):
     """启动一个脱离当前进程的 GUI 子进程。"""
     if IS_WINDOWS:
@@ -104,6 +117,63 @@ def popen_detached(args):
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+
+
+def background_python():
+    """跑后台服务用的解释器。
+
+    Windows 上优先用 `pythonw.exe`：它是 GUI 子系统程序，**永远不附着控制台**，
+    比只靠 DETACHED_PROCESS 又稳一层（双重保险：即使标志位没生效，
+    pythonw 也不会因为关掉黑窗而收到 CTRL_CLOSE_EVENT）。
+    """
+    if IS_WINDOWS:
+        candidate = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+        if os.path.isfile(candidate):
+            return candidate
+    return sys.executable
+
+
+def spawn_background(args, log_path=None):
+    """把进程彻底从当前终端分离出去，返回 Popen 对象。
+
+    **这是"服务常驻"的前提。** Windows 上关闭控制台窗口会向同控制台的
+    所有子进程发送 CTRL_CLOSE_EVENT —— 普通子进程会被一起杀掉，
+    用户一关黑窗服务就没了。所以必须用 DETACHED_PROCESS 让子进程
+    不与任何控制台绑定。
+
+    POSIX 下用 start_new_session 达到同样效果（脱离会话、不接收 SIGHUP）。
+    """
+    out = None
+    if log_path is not None:
+        try:
+            directory = os.path.dirname(str(log_path))
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+            out = open(str(log_path), "ab")
+        except OSError:
+            out = None
+
+    stdout = out if out is not None else subprocess.DEVNULL
+    stderr = subprocess.STDOUT if out is not None else subprocess.DEVNULL
+
+    kwargs = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": stdout,
+        "stderr": stderr,
+        "close_fds": True,
+    }
+    if IS_WINDOWS:
+        flags = 0
+        for name in ("DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP"):
+            flags |= getattr(subprocess, name, 0)
+        kwargs["creationflags"] = flags
+    else:
+        kwargs["start_new_session"] = True
+
+    process = subprocess.Popen(args, **kwargs)
+    if out is not None:
+        out.close()          # 子进程已持有自己的句柄，父进程这份可以关掉
+    return process
 
 
 def open_in_file_manager(path):

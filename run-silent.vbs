@@ -23,6 +23,6 @@ If Not fso.FileExists(target) Then
     WScript.Quit 1
 End If
 
-cmd = "pythonw """ & target & """"
+cmd = "pythonw """ & target & """ --detach"
 ' second argument 0 = hidden window, third argument False = do not wait
 shell.Run cmd, 0, False

@@ -21,6 +21,7 @@ from urllib.parse import parse_qs
 from core import paths, registry
 from core.errors import ToolError
 from services import config, logs
+from web import APP_TAG
 
 MAX_BODY = 1024 * 1024          # 1 MB
 TOKEN_HEADER = "X-Toolbox-Token"
@@ -89,6 +90,27 @@ class Application(object):
             given = parse_qs(query).get("t", [""])[0]
         try:
             return hmac.compare_digest(given.encode("utf-8"), self.token.encode("utf-8"))
+        except Exception:
+            return False
+
+    def identity(self):
+        if self.server is None:
+            return {"app": APP_TAG, "instance": "", "port": 0}
+        return self.server.identity()
+
+    def instance_ok(self, query):
+        """用实例标识校验「stop 命令」发来的关闭请求。
+
+        stop 在进程外运行、拿不到页面令牌，所以改用 server.json 里的实例标识。
+        两者的信任级别相同 —— 能读到 server.json 的人本来就能直接结束该进程。
+        """
+        given = parse_qs(query).get("i", [""])[0]
+        server = self.server
+        if server is None or not given:
+            return False
+        try:
+            return hmac.compare_digest(given.encode("utf-8"),
+                                       server.instance_id.encode("utf-8"))
         except Exception:
             return False
 
@@ -183,6 +205,10 @@ def build_handler(app):
 
                 path, _, query = self.path.partition("?")
 
+                # 任何请求都算"有人在用"，空闲退出依据的是这个
+                if app.server is not None:
+                    app.server.note_activity()
+
                 if path in ("/", "/index.html"):
                     self._send(200, app.index_html(), "text/html; charset=utf-8")
                     return
@@ -192,6 +218,22 @@ def build_handler(app):
                 if path.startswith("/static/"):
                     self._serve_static(path[len("/static/"):])
                     return
+
+                # ---- 下面两个端点不走令牌校验 ----
+                # /api/identity：新启动的进程要能探测到老进程，而它不知道老进程的令牌
+                if path == "/api/identity" and method == "GET":
+                    self._ok(app.identity())
+                    return
+                # /api/shutdown：stop 命令用 server.json 里的实例标识校验
+                if path == "/api/shutdown" and method == "POST":
+                    if not app.instance_ok(query):
+                        self._json(403, {"ok": False, "error": "实例校验失败"})
+                        return
+                    self._ok({"bye": True})
+                    if app.server is not None:
+                        app.server.request_shutdown()
+                    return
+
                 if path.startswith("/api/"):
                     if not app.token_ok(self.headers, query):
                         self._json(403, {"ok": False, "error": "令牌校验失败，请重新打开页面"})
@@ -271,17 +313,29 @@ def build_handler(app):
                 self._ok({"time": time.time()})
                 return
 
+            if path == "/api/status" and method == "GET":
+                data = dict(app.identity())
+                data.pop("instance", None)          # 页面不需要知道实例标识
+                self._ok(data)
+                return
+
             if path == "/api/quit" and method == "POST":
+                # 界面上的「关闭服务」按钮 —— 无论哪种模式都真的关掉
                 self._ok({"bye": True})
                 if app.server is not None:
                     app.server.request_shutdown()
                 return
 
             if path == "/api/bye" and method == "POST":
-                # 页面关闭时由 sendBeacon 触发：关掉 --app 窗口即退出程序
-                self._ok({"bye": True})
-                if app.server is not None:
-                    app.server.request_shutdown()
+                # 页面关闭时由 sendBeacon 触发。
+                # 常驻模式下**关窗口不等于关服务**，所以这里什么都不做，
+                # 只把 keep_alive 回给前端，让它知道服务还活着。
+                server = app.server
+                if server is None or server.keep_alive:
+                    self._ok({"bye": True, "keep_alive": True})
+                    return
+                self._ok({"bye": True, "keep_alive": False})
+                server.request_shutdown()
                 return
 
             if path.startswith("/api/tool/") and method == "POST":

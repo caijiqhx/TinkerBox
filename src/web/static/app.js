@@ -239,13 +239,49 @@
   }
 
   function quitApp() {
-    if (!window.confirm("确定要退出工具箱吗？")) { return; }
+    if (!window.confirm("确定要关闭工具箱服务吗？\n关闭后这个页面就会失效，下次使用需要重新运行启动脚本。")) {
+      return;
+    }
     saidGoodbye = true;
     apiPost("/api/quit").catch(function () { /* 服务即将关闭，忽略 */ });
+
+    var node = document.getElementById("server-status");
+    if (node) { node.textContent = "服务已关闭"; }
+
     var main = mainNode();
     clear(main);
-    main.appendChild(pageHead("已退出", "服务已关闭，可以直接关闭这个窗口。"));
+    main.appendChild(pageHead("服务已关闭", "可以直接关掉这个窗口了。下次使用请重新运行启动脚本。"));
     main.appendChild(emptyBlock("感谢使用", "✓"));
+  }
+
+  /* ================= 服务状态 ================= */
+
+  function humanDuration(seconds) {
+    seconds = Math.max(0, Math.floor(seconds || 0));
+    if (seconds < 60) { return seconds + " 秒"; }
+    var minutes = Math.floor(seconds / 60);
+    if (minutes < 60) { return minutes + " 分钟"; }
+    var hours = Math.floor(minutes / 60);
+    var rest = minutes % 60;
+    if (hours < 24) {
+      return rest ? (hours + " 小时 " + rest + " 分钟") : (hours + " 小时");
+    }
+    return Math.floor(hours / 24) + " 天 " + (hours % 24) + " 小时";
+  }
+
+  /* 侧栏底部那行小字：常驻模式下服务一直在后台，给个可见的凭据 */
+  function refreshStatus() {
+    var node = document.getElementById("server-status");
+    apiGet("/api/status").then(function (data) {
+      if (!node) { return; }
+      node.textContent = "服务运行中 · 端口 " + data.port + " · " + humanDuration(data.uptime);
+      node.title = "启动于 " + (data.started || "-")
+        + (data.keep_alive
+            ? "\n常驻模式：关掉窗口后服务会继续留在后台"
+            : "\n跟随窗口：关掉窗口即退出");
+    }).catch(function () {
+      if (node) { node.textContent = "服务状态未知"; }
+    });
   }
 
   /* ================= 心跳与退出通知 ================= */
@@ -353,6 +389,8 @@
     window.addEventListener("beforeunload", sayGoodbye);
 
     initTheme();
+    refreshStatus();
+    setInterval(refreshStatus, 60000);
 
     apiGet("/api/tools").then(function (data) {
       tools = (data && data.tools) || [];
