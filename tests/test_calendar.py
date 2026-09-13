@@ -101,6 +101,93 @@ class MonthViewTest(unittest.TestCase):
         self.assertIsNone(model.month_view("x", 1))
 
 
+class LunarTest(unittest.TestCase):
+    """农历转换（内置 1900-2100 表）。"""
+
+    def test_day_name(self):
+        # 非初一：显示日名（初一以外不加月名）
+        self.assertEqual(model.lunar_str("2026-09-25"), "十五")    # 中秋节
+        self.assertEqual(model.lunar_str("2026-06-19"), "初五")    # 端午节
+        self.assertEqual(model.lunar_str("2026-01-01"), "十三")    # 冬月十三
+
+    def test_first_day_shows_month_name(self):
+        # 每月初一显示月名；2026-02-17 是丙午年正月初一（春节）
+        self.assertEqual(model.lunar_str("2026-02-17"), "正月")
+        self.assertEqual(model.lunar_str("2024-02-10"), "正月")
+        self.assertEqual(model.lunar_str("2025-02-28"), "二月")
+        self.assertEqual(model.lunar_str("2023-03-22"), "闰二月")  # 2023 闰二月初一
+
+    def test_spring_festival_eve(self):
+        # 除夕前后：2026-02-16 除夕(廿九)，2/15 廿八
+        self.assertEqual(model.lunar_str("2026-02-16"), "廿九")
+        self.assertEqual(model.lunar_str("2026-02-15"), "廿八")
+        self.assertEqual(model.lunar_str("2026-02-17"), "正月")
+
+    def test_range_edges(self):
+        # 数据表支持 1900-01-31 ~ 2100-12-31
+        self.assertEqual(model.lunar_str("1900-01-31"), "正月")
+        self.assertEqual(model.lunar_str("2100-12-31"), "腊月")
+        # 越界 / 非法输入返回空串（前端不显示）
+        self.assertEqual(model.lunar_str("1899-12-31"), "")
+        self.assertEqual(model.lunar_str("2101-01-01"), "")
+        self.assertEqual(model.lunar_str("not-a-date"), "")
+        self.assertEqual(model.lunar_str(""), "")
+
+    def test_leap_month_sequence(self):
+        # 2023 闰二月：闰二月初一在 3/22，正月最后一天是 2/19
+        self.assertEqual(model.lunar_str("2023-02-19"), "廿九")
+        self.assertEqual(model.lunar_str("2023-02-20"), "二月")
+        self.assertEqual(model.lunar_str("2023-03-22"), "闰二月")
+
+    def test_month_view_items_include_lunar(self):
+        v = model.month_view(2026, 2)
+        by_day = {i["day"]: i["lunar"] for i in v["items"]}
+        self.assertEqual(by_day[17], "正月")
+        self.assertEqual(by_day[16], "廿九")
+        self.assertEqual(by_day[15], "廿八")
+        # 每一天都有农历文本（2000-2100 内）
+        self.assertTrue(all(i["lunar"] for i in v["items"]))
+
+
+class OverviewTest(unittest.TestCase):
+    """月份概览（节假日 / 调休 数量与跨度）。"""
+
+    def test_february_2026(self):
+        v = model.month_view(2026, 2)
+        ov = v["overview"]
+        self.assertEqual(ov["holidays"], 9)                    # 春节 2/15-23
+        self.assertEqual(ov["adjusts"], 2)                     # 调休 2/14、2/28
+        self.assertEqual(ov["holiday_span"], [15, 23])
+        self.assertEqual(ov["adjust_span"], [14, 28])
+        self.assertEqual(ov["holiday_names"][0]["name"], "春节")
+        self.assertEqual(ov["holiday_names"][0]["days"], 9)
+
+    def test_january_2026(self):
+        v = model.month_view(2026, 1)
+        ov = v["overview"]
+        self.assertEqual(ov["holidays"], 3)                    # 元旦 1/1-3
+        self.assertEqual(ov["adjusts"], 1)                     # 补班 1/4
+        self.assertEqual(ov["adjust_span"], [4, 4])            # 单天也按 [首, 末]
+        self.assertEqual(ov["holiday_names"][0]["name"], "元旦")
+
+    def test_cross_month_holiday_counts_local_days(self):
+        # 国庆 2026-10-01~07 全在 10 月内；另有 10/10 补班。
+        v = model.month_view(2026, 10)
+        ov = v["overview"]
+        self.assertEqual(ov["holidays"], 7)
+        self.assertEqual(ov["adjusts"], 1)                     # 10/10 国庆调休
+        self.assertEqual(ov["adjust_span"], [10, 10])
+
+    def test_month_without_holidays(self):
+        v = model.month_view(2026, 7)
+        ov = v["overview"]
+        self.assertEqual(ov["holidays"], 0)
+        self.assertEqual(ov["adjusts"], 0)
+        self.assertEqual(ov["holiday_names"], [])
+        self.assertEqual(ov["holiday_span"], [])
+        self.assertEqual(ov["adjust_span"], [])
+
+
 class CalendarToolTest(unittest.TestCase):
     def setUp(self):
         self.tool = tool.CalendarTool()

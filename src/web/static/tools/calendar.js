@@ -1,14 +1,15 @@
-/* 日历 —— 前端界面（带节假日 / 调休标注的月历）
+/* 日历 —— 前端界面（带节假日 / 调休 / 农历标注的月历）
  *
- * 布局：顶部标题 + 上/下月切换 + 回到今天；下方 7 列月历网格。
+ * 布局：顶部标题 + 上/下月切换 + 回到今天；中部月份概览；下方 7 列月历网格。
  * 状态四态（与后端 model 一致）：
  *   holiday  法定节假日 —— 红字 + 节日名
  *   workday  调休补班日 —— 橙字 + 「班」徽标
  *   weekend  普通周末   —— 灰字
  *   work     普通工作日 —— 默认色
+ * 每格第二行显示农历（每月初一显示月名，其余显示日名，如 正月 / 初二 / 十五）。
  *
- * 只负责渲染与交互，所有数据（含节假日判定）都在后端 action。
- * 数据源：内置 holidays.json（离线可用），年份缺失时正常显示、只是无节日标注。
+ * 只负责渲染与交互，所有数据（含节假日 / 农历判定）都在后端 action。
+ * 数据源：内置 holidays.json + 内置农历表（1900-2100），彻底离线可用。
  */
 (function (window, document) {
   "use strict";
@@ -16,7 +17,7 @@
   var ctx = null;
   var el = null;
 
-  var headBox = null, gridBox = null;
+  var headBox = null, overviewBox = null, gridBox = null;
   var state = { year: 0, month: 0 };   /* 0 = 尚未加载 */
 
   /* 小 SVG（行为与 todo.js 一致：不用文本字符，避免 UOS 字体缺字形） */
@@ -65,6 +66,45 @@
     headBox.appendChild(group);
   }
 
+  /* 月份概览：如「节假日 9 天 · 春节(9天)」「调休 2 天 · 2/14、2/28」 */
+  function renderOverview(view) {
+    ctx.clear(overviewBox);
+    var ov = view.overview || {};
+    var m = parseInt(view.year_month.split("-")[1], 10);
+    var parts = [];
+
+    if (ov.holidays > 0) {
+      var names = (ov.holiday_names || [])
+        .map(function (n) { return n.name + "(" + n.days + "天)"; })
+        .join("、");
+      var hInfo = "节假日 " + ov.holidays + " 天";
+      if (names) { hInfo += " · " + names; }
+      var hChip = el("span", { class: "ov-chip holiday", text: hInfo });
+      if (ov.holiday_span && ov.holiday_span.length === 2) {
+        hChip.title = m + "/" + ov.holiday_span[0] + "-" + m + "/" + ov.holiday_span[1];
+      }
+      parts.push(hChip);
+    }
+
+    if (ov.adjusts > 0) {
+      var aDays = ov.adjust_span || [];
+      var aText = "调休 " + ov.adjusts + " 天";
+      if (aDays.length === 2) {
+        aText += " · " + m + "/" + aDays[0] +
+          (aDays[1] === aDays[0] ? "" : "、" + m + "/" + aDays[1]);
+      }
+      parts.push(el("span", { class: "ov-chip adj", text: aText }));
+    }
+
+    if (parts.length === 0) {
+      overviewBox.appendChild(el("div", { class: "ov-empty", text: "本月无节假日 / 调休安排" }));
+    } else {
+      var row = el("div", { class: "cal-overview" });
+      for (var i = 0; i < parts.length; i++) { row.appendChild(parts[i]); }
+      overviewBox.appendChild(row);
+    }
+  }
+
   function renderGrid(view) {
     ctx.clear(gridBox);
 
@@ -88,15 +128,20 @@
         if (item.date === today) { cls += " today"; }
 
         var kids = [];
-        var num = el("span", { class: "cal-num", text: String(item.day) });
-        kids.push(num);
+        kids.push(el("span", { class: "cal-num", text: String(item.day) }));
 
+        /* 业务行：节假日名 / 调休「班」徽标（比农历重要，放前面） */
         if (item.status === "holiday" && item.name) {
           kids.push(el("span", { class: "cal-name", text: item.name }));
         } else if (item.status === "workday") {
           kids.push(el("span", { class: "cal-adj", text: "班" }));
         }
-        grid.appendChild(el("div", { class: cls, title: item.name || "", }, kids));
+
+        /* 农历行：每月初一显示月名（正月 / 闰二月），其余显示日名（初二 / 十五） */
+        if (item.lunar) {
+          kids.push(el("span", { class: "cal-lunar", text: item.lunar }));
+        }
+        grid.appendChild(el("div", { class: cls, title: item.name || item.lunar || "", }, kids));
       })(view.items[n]);
     }
     gridBox.appendChild(grid);
@@ -118,6 +163,7 @@
       state.year = view.year;
       state.month = view.month;
       renderHead(view);
+      renderOverview(view);
       renderGrid(view);
     }).catch(function (err) {
       ctx.toast(err.message, true);
@@ -139,8 +185,10 @@
 
     var shell = el("div", { class: "cal-shell" });
     headBox = el("div", { class: "cal-head" });
+    overviewBox = el("div", { class: "cal-overview-wrap" });
     gridBox = el("div", { class: "cal-body" });
     shell.appendChild(headBox);
+    shell.appendChild(overviewBox);
     shell.appendChild(gridBox);
     container.appendChild(shell);
 

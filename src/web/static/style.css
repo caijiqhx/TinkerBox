@@ -894,6 +894,41 @@ mark.hit {
 
 .cal-body { }
 
+/* 月份概览：节假日 / 调休 汇总胶囊行 */
+.cal-overview-wrap { margin-bottom: 12px; }
+.cal-overview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.ov-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.ov-chip.holiday {
+  color: var(--danger);
+  background: var(--holiday-bg);
+  border-color: var(--holiday-line);
+}
+.ov-chip.adj {
+  color: var(--warn);
+  background: var(--adjust-bg);
+  border-color: var(--adjust-line);
+}
+.ov-empty {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 .cal-week {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -929,6 +964,13 @@ mark.hit {
 }
 
 .cal-num { font-size: 14px; font-weight: 600; color: var(--text); }
+.cal-lunar {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+}
 .cal-name { font-size: 10.5px; color: var(--danger); line-height: 1; text-align: center; }
 .cal-adj {
   font-size: 11px;
@@ -950,12 +992,14 @@ mark.hit {
 }
 .cal-cell.holiday .cal-num { color: var(--danger); }
 .cal-cell.holiday .cal-name { color: var(--danger); }
+.cal-cell.holiday .cal-lunar { color: var(--danger); opacity: .75; }
 
 .cal-cell.workday {
   background: var(--adjust-bg);
   border-color: var(--adjust-line);
 }
 .cal-cell.workday .cal-num { color: var(--warn); }
+.cal-cell.workday .cal-lunar { color: var(--warn); opacity: .75; }
 
 .cal-cell.weekend .cal-num { color: var(--text-mute); }
 
