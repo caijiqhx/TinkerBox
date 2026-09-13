@@ -614,6 +614,22 @@ body {
 .chip.soon { color: var(--accent); border-color: var(--accent); }
 .chip.progress { color: var(--accent); border-color: var(--accent); }
 
+/* 搜索命中的片段 */
+mark.hit {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+/* 到期日快捷项：当前值那一个高亮出来 */
+.due-quick { margin-top: 2px; }
+.due-quick .btn.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
 .chip.tag {
   display: inline-flex;
   align-items: center;

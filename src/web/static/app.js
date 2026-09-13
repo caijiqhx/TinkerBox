@@ -116,6 +116,13 @@
     return document.getElementById("confirm").className.indexOf("hidden") < 0;
   }
 
+  /* 有对话框开着时，工具层的快捷键必须让位 ——
+     否则在确认框里按 Esc 会同时把背后的详情面板也收起来。 */
+  function dialogOpen() {
+    return confirmOpen()
+      || document.getElementById("modal").className.indexOf("hidden") < 0;
+  }
+
   function settleConfirm(result) {
     if (!confirmOpen()) { return; }        // Esc 与点击可能先后到达，只认第一次
     document.getElementById("confirm").className = "modal hidden";
@@ -407,6 +414,7 @@
     callTool: callTool,
     toast: toast,
     confirm: confirmDialog,
+    dialogOpen: dialogOpen,
     openModal: openModal,
     closeModal: closeModal,
     go: function (key) { window.location.hash = "#" + key; },

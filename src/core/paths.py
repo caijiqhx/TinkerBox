@@ -42,7 +42,20 @@ def _user_data_dir():
 
 
 def data_dir():
-    """运行时数据目录：项目内 data/ 优先，不可写则退回用户目录。"""
+    """运行时数据目录：项目内 data/ 优先，不可写则退回用户目录。
+
+    环境变量 TOOLBOX_DATA_DIR 可以整体改写数据目录 —— 用来做隔离测试
+    （比如"跑冒烟脚本时不要碰真实待办"），平时不需要设置。
+    """
+    override = (os.environ.get("TOOLBOX_DATA_DIR") or "").strip()
+    if override:
+        target = Path(override).expanduser()
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        return target
+
     candidate = project_root() / "data"
     try:
         candidate.mkdir(parents=True, exist_ok=True)

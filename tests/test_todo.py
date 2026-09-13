@@ -316,6 +316,55 @@ class TodoToolTest(unittest.TestCase):
         self.assertEqual(self.tool.act_clear_done({})["removed"], 1)
         self.assertEqual(self.tool.act_board({})["stats"]["total"], 0)
 
+    def test_save_keeps_rotating_backups(self):
+        """每次保存前留一份上一版，且份数有界 —— 这是"整个文件被写坏"的兜底。"""
+        for index in range(1, 4):
+            self.tool.act_add({"title": "第 %d 条" % (index,)})
+
+        names = sorted(n for n in os.listdir(self.tmp) if ".bak." in n)
+        self.assertEqual(names, ["todo.json.bak.1", "todo.json.bak.2"])
+
+        # bak.1 = 覆盖前那一版（2 条），bak.2 = 更早那一版（1 条）
+        newest = jsonio.read_json(jsonio.backup_path(store.file_path(), 1))
+        older = jsonio.read_json(jsonio.backup_path(store.file_path(), 2))
+        self.assertEqual(len(newest["tasks"]), 2)
+        self.assertEqual(len(older["tasks"]), 1)
+
+    def test_backup_files_do_not_break_load(self):
+        """备份文件与主文件同目录，不能干扰正常读取。"""
+        self.tool.act_add({"title": "一"})
+        self.tool.act_add({"title": "二"})
+        self.assertEqual(self.tool.act_board({})["stats"]["total"], 2)
+
+    def test_due_presets_are_today_and_tomorrow(self):
+        """用固定日期校验，免得结果随"今天是星期几"变化。"""
+        presets = model.due_presets(datetime.date(2026, 9, 13))
+        self.assertEqual([p["label"] for p in presets], ["今天", "明天"])
+        self.assertEqual(presets[0]["value"], "2026-09-13")
+        self.assertEqual(presets[1]["value"], "2026-09-14")
+
+        # 跨月也要对
+        presets = model.due_presets(datetime.date(2026, 9, 30))
+        self.assertEqual(presets[1]["value"], "2026-10-01")
+
+    def test_week_end_matches_planned_grouping(self):
+        """「已计划」里"本周"的上界就是 model.week_end()，后端只此一份口径。"""
+        # 周日：本周日就是今天；周一与周六：都指向同一个周日
+        self.assertEqual(model.week_end(datetime.date(2026, 9, 13)).isoformat(), "2026-09-13")
+        self.assertEqual(model.week_end(datetime.date(2026, 9, 14)).isoformat(), "2026-09-20")
+        self.assertEqual(model.week_end(datetime.date(2026, 9, 19)).isoformat(), "2026-09-20")
+
+        task = self.tool.act_add({"title": "本周内"})["task"]
+        self.tool.act_update({"id": task["id"],
+                              "fields": {"due": model.week_end().isoformat()}})
+        groups = dict((g["key"], g["tasks"])
+                      for g in self.tool.act_board({"view": "planned"})["groups"])
+        landed = [key for key, items in groups.items()
+                  if task["id"] in [t["id"] for t in items]]
+        # 今天正好是周日时"本周日"就是今天，会落 today 桶；其余星期落 week 桶
+        self.assertEqual(len(landed), 1, landed)
+        self.assertIn(landed[0], ("today", "week"), landed)
+
     def test_unknown_task_id(self):
         with self.assertRaises(ToolError):
             self.tool.act_toggle({"id": "not-exist"})

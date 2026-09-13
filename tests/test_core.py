@@ -11,12 +11,14 @@ import shutil
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SRC = os.path.join(os.path.dirname(_HERE), "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
+from core import paths                              # noqa: E402
 from core import registry                            # noqa: E402
 from core.errors import NotFoundError, ToolError     # noqa: E402
 from core.tool import Tool, ToolMeta                 # noqa: E402
@@ -143,6 +145,84 @@ class JsonIoTest(unittest.TestCase):
             self.assertEqual(json.load(handle), {"k": [1, {"n": None}]})
 
 
+class BackupRotationTest(unittest.TestCase):
+    """备份轮转：份数有界（不需要手工清理），关掉时不留文件。"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="toolbox-bak-")
+        self.path = os.path.join(self.tmp, "a.json")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _write(self, value):
+        jsonio.write_json_atomic(self.path, {"v": value})
+
+    def _backup(self, index):
+        return jsonio.read_json(jsonio.backup_path(self.path, index))
+
+    def test_no_backup_when_target_missing(self):
+        self.assertEqual(jsonio.rotate_backup(self.path, 3), 0)
+
+    def test_newest_is_index_1_and_oldest_is_dropped(self):
+        # 与 store.save 的用法一致：先轮转（留上一版），再写新内容
+        for step in range(1, 6):
+            jsonio.rotate_backup(self.path, 3)
+            self._write(step)
+
+        self.assertEqual(jsonio.read_json(self.path), {"v": 5})
+        self.assertEqual(self._backup(1), {"v": 4})
+        self.assertEqual(self._backup(2), {"v": 3})
+        self.assertEqual(self._backup(3), {"v": 2})
+        self.assertIsNone(self._backup(4))        # 超出上限的直接丢弃
+
+    def test_keep_zero_disables_backup(self):
+        self._write(1)
+        self.assertEqual(jsonio.rotate_backup(self.path, 0), 0)
+        self.assertIsNone(self._backup(1))
+
+    def test_non_numeric_keep_is_treated_as_off(self):
+        self._write(1)
+        self.assertEqual(jsonio.rotate_backup(self.path, "五个"), 0)
+
+    def test_backup_keeps_chinese_readable(self):
+        jsonio.write_json_atomic(self.path, {"标题": "买牛奶"})
+        jsonio.rotate_backup(self.path, 1)
+        with open(jsonio.backup_path(self.path, 1), "r", encoding="utf-8") as handle:
+            self.assertIn("买牛奶", handle.read())
+
+
+class DataDirOverrideTest(unittest.TestCase):
+    """TOOLBOX_DATA_DIR 用来做隔离测试 —— 跑冒烟时不必碰真实数据。"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="toolbox-datadir-")
+        self._original = os.environ.get("TOOLBOX_DATA_DIR")
+
+    def tearDown(self):
+        if self._original is None:
+            os.environ.pop("TOOLBOX_DATA_DIR", None)
+        else:
+            os.environ["TOOLBOX_DATA_DIR"] = self._original
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_env_override_wins(self):
+        os.environ["TOOLBOX_DATA_DIR"] = self.tmp
+        self.assertEqual(str(paths.data_dir()), str(Path(self.tmp)))
+        self.assertEqual(str(paths.state_file()),
+                         str(Path(self.tmp) / "todo.json"))
+
+    def test_missing_directory_is_created(self):
+        nested = os.path.join(self.tmp, "a", "b")
+        os.environ["TOOLBOX_DATA_DIR"] = nested
+        self.assertEqual(str(paths.data_dir()), str(Path(nested)))
+        self.assertTrue(os.path.isdir(nested))
+
+    def test_blank_value_falls_back_to_project_data(self):
+        os.environ["TOOLBOX_DATA_DIR"] = "   "
+        self.assertEqual(paths.data_dir(), paths.project_root() / "data")
+
+
 class ConfigTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="toolbox-cfg-")
@@ -164,6 +244,9 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.get("port"), 8765)
         self.assertTrue(config.get("keep_alive"))
         self.assertEqual(config.get("idle_exit_hours"), 12)
+
+    def test_backup_default_is_on(self):
+        self.assertEqual(config.get("backup_keep"), 5)
 
     def test_set_then_reload_persists(self):
         config.set_value("theme", "dark")

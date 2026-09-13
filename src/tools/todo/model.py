@@ -57,6 +57,29 @@ def today_text():
     return datetime.date.today().isoformat()
 
 
+def week_end(today=None):
+    """今天所在周的周日。
+
+    「已计划」分组和"到期日快捷项"共用这一个函数 —— 否则两处各写一遍，
+    迟早出现"点本周末得到的那天，跟已计划里本周末分组对不上"的怪事。
+    """
+    today = today or datetime.date.today()
+    return today + datetime.timedelta(days=(6 - today.weekday()))
+
+
+def due_presets(today=None):
+    """到期日的快捷选项：只有「今天」和「明天」。
+
+    日期由**后端**算、随 board 一起发给前端渲染 ——
+    同一份口径不在两个语言里各写一遍，既能被单元测试覆盖，也不会两边漂移。
+    """
+    today = today or datetime.date.today()
+    return [
+        {"label": "今天", "value": today.isoformat()},
+        {"label": "明天", "value": (today + datetime.timedelta(days=1)).isoformat()},
+    ]
+
+
 def parse_date(value):
     """把 YYYY-MM-DD 解析成 date；非法返回 None。"""
     text = str(value or "").strip()

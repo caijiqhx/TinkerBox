@@ -176,7 +176,7 @@ class TodoTool(Tool):
     def _planned_groups(tasks):
         today = datetime.date.today()
         tomorrow = today + datetime.timedelta(days=1)
-        week_end = today + datetime.timedelta(days=(6 - today.weekday()))
+        week_end = model.week_end(today)          # 与到期日快捷项共用同一口径
 
         buckets = [
             ("overdue", "已过期", []),
@@ -250,6 +250,7 @@ class TodoTool(Tool):
             "list_id": list_id,
             "title": title,
             "today": model.today_text(),
+            "presets": model.due_presets(),        # 到期日快捷项（口径在 model 里统一）
             "lists": self._lists_with_counts(lists, tasks),
             "views": self._view_counts(tasks),
             "groups": self._group(selected, view, bool(keyword)),

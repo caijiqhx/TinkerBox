@@ -83,11 +83,55 @@
     return !!task.my_day && task.my_day === isoToday();
   }
 
+  /* 把命中的关键词拆成 <mark>。只用于展示，拼接一律走 textContent。 */
+  function highlight(text, keyword) {
+    var raw = String(text || "");
+    var needle = String(keyword || "");
+    if (!needle) { return document.createTextNode(raw); }
+
+    var lower = raw.toLowerCase();
+    var target = needle.toLowerCase();
+    var frag = document.createDocumentFragment();
+    var from = 0;
+    var found = false;
+    for (;;) {
+      var at = lower.indexOf(target, from);
+      if (at < 0) { break; }
+      if (at > from) { frag.appendChild(document.createTextNode(raw.slice(from, at))); }
+      frag.appendChild(el("mark", { class: "hit", text: raw.slice(at, at + needle.length) }));
+      from = at + needle.length;
+      found = true;
+    }
+    if (!found) { return document.createTextNode(raw); }
+    if (from < raw.length) { frag.appendChild(document.createTextNode(raw.slice(from))); }
+    return frag;
+  }
+
   function isSelected(task) {
     return !!state.selected && state.selected.id === task.id;
   }
 
   /* ================= 数据 ================= */
+
+  /* 重建 DOM 会把主滚动区（#main）滚回顶部 —— 表现就是"点一下按钮，页面跳到最上面"。
+     直接原因：被删掉的那个按钮还带着焦点，浏览器把焦点退回 body 时顺手滚了一次。
+     这里在重建前后把滚动位置搬回去，不管浏览器具体走哪条路径都不会跳；
+     再补一帧是防"焦点回退之后才滚"的引擎。 */
+  function keepScroll(rebuild) {
+    var box = document.getElementById("main");
+    var top = box ? box.scrollTop : 0;
+    var page = window.pageYOffset || 0;
+
+    function restore() {
+      var node = document.getElementById("main");
+      if (node && top) { node.scrollTop = top; }
+      if (page) { window.scrollTo(0, page); }
+    }
+
+    rebuild();
+    restore();
+    if (window.requestAnimationFrame) { window.requestAnimationFrame(restore); }
+  }
 
   function refresh() {
     return ctx.callTool("todo", "board", {
@@ -97,10 +141,12 @@
     }).then(function (data) {
       state.board = data;
       syncSelection(data);
-      renderHead();
-      renderRail();
-      renderList();
-      renderDetail();
+      keepScroll(function () {
+        renderHead();
+        renderRail();
+        renderList();
+        renderDetail();
+      });
       return data;
     }).catch(function (err) {
       ctx.toast("读取待办失败：" + err.message, true);
@@ -426,7 +472,7 @@
       meta.appendChild(tagNodes[ti]);
     }
 
-    var title = el("div", { class: "task-title", text: task.title });
+    var title = el("div", { class: "task-title" }, [highlight(task.title, state.keyword)]);
     var main = el("div", {
       class: "task-main",
       title: "点击查看详情",
@@ -669,9 +715,29 @@
         onclick: function () { act("update", { id: task.id, fields: { due: "" } }); }
       }));
     }
+    /* 快捷项由后端给（口径统一在后端），前端只负责渲染。
+       mousedown 阻止默认行为是为了**不让按钮拿到焦点** ——
+       否则它被重建掉时焦点退回 body，浏览器会顺手把页面滚回顶部。 */
+    var quick = el("div", { class: "detail-row due-quick" });
+    var presets = (state.board && state.board.presets) || [];
+    for (var qi = 0; qi < presets.length; qi++) {
+      (function (preset) {
+        quick.appendChild(el("button", {
+          class: "btn small ghost" + (task.due === preset.value ? " on" : ""),
+          text: preset.label,
+          title: preset.value,
+          onmousedown: function (event) { event.preventDefault(); },
+          onclick: function () {
+            act("update", { id: task.id, fields: { due: preset.value } });
+          }
+        }));
+      })(presets[qi]);
+    }
+
     detailBox.appendChild(el("div", { class: "detail-sec" }, [
       dueLabel,
-      el("div", { class: "detail-row" }, [dueInput])
+      el("div", { class: "detail-row" }, [dueInput]),
+      quick
     ]));
 
     /* --- 所属清单 --- */
@@ -734,10 +800,9 @@
   function stepTitleNode(task, step) {
     var node = el("div", {
       class: "step-title",
-      text: step.title,
       title: "点击可修改",
       onclick: function () { editStepTitle(task, step, node); }
-    });
+    }, [highlight(step.title, state.keyword)]);
     return node;
   }
 
@@ -875,6 +940,26 @@
 
     refresh();
   }
+
+  /* ================= 全局快捷键 ================= */
+
+  /* Esc 收起详情面板。
+     注册在模块层而不是 render() 里 —— render() 每次进入这个工具都会调用，
+     注册在那里的监听器会越积越多。
+
+     两种情况必须让位，否则"按一次 Esc 会关掉两样东西"：
+     ① 有弹窗开着（Esc 该由外壳负责关弹窗）；
+     ② 焦点在输入框里（行内编辑的 Esc 是"放弃本次修改"）。 */
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") { return; }
+    if (ctx && ctx.dialogOpen && ctx.dialogOpen()) { return; }
+    var tag = (event.target && event.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") { return; }
+    if (!state.selected) { return; }
+    state.selected = null;
+    renderList();
+    renderDetail();
+  });
 
   window.ToolBox.registerTool("todo", { render: render });
 })(window, document);
