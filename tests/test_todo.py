@@ -506,6 +506,133 @@ class TodoToolTest(unittest.TestCase):
         self.assertEqual([t["title"] for t in trash], ["有效"])
         self.assertTrue(trash[0]["deleted_at"])       # 缺时间戳的按"刚删"补上
 
+    # ---------------------------------------------------------------- 批量操作
+    def _make(self, *titles):
+        return [self.tool.act_add({"title": t})["task"] for t in titles]
+
+    def _titles(self, view="all"):
+        return [t["title"] for g in self.tool.act_board({"view": view})["groups"]
+                for t in g["tasks"]]
+
+    def test_bulk_done_sets_explicit_value(self):
+        ids = [t["id"] for t in self._make("甲", "乙", "丙")]
+        result = self.tool.act_bulk({"ids": ids, "op": "done", "value": True})
+        self.assertEqual(result["changed"], 3)
+        self.assertEqual(self._titles("completed"), ["甲", "乙", "丙"])
+
+        # 再标一次：已经是目标状态，changed 归零（说明是"设值"不是"切换"）
+        again = self.tool.act_bulk({"ids": ids, "op": "done", "value": True})
+        self.assertEqual(again["changed"], 0)
+
+        # 混合状态下用"取消完成"，只动那些确实是完成的
+        self.tool.act_toggle({"id": ids[0]})
+        back = self.tool.act_bulk({"ids": ids, "op": "done", "value": False})
+        self.assertEqual(back["changed"], 2)
+        self.assertEqual(self._titles("completed"), [])
+
+    def _days(self):
+        return [x["my_day"] for g in self.tool.act_board({"view": "my_day"})["groups"]
+                for x in g["tasks"]]
+
+    def test_bulk_important_and_my_day(self):
+        ids = [t["id"] for t in self._make("甲", "乙")]
+        self.tool.act_bulk({"ids": ids, "op": "important", "value": True})
+        self.assertEqual(self.tool.act_board({"view": "important"})["shown"], 2)
+
+        # 已经重要的那条不该被重复计数
+        self.tool.act_toggle_important({"id": ids[0]})
+        result = self.tool.act_bulk({"ids": ids, "op": "important", "value": True})
+        self.assertEqual(result["changed"], 1)
+
+        self.tool.act_bulk({"ids": ids, "op": "my_day", "value": True})
+        self.assertEqual(self.tool.act_board({"view": "my_day"})["shown"], 2)
+        self.assertEqual(self._days(), [_today(), _today()])
+
+        self.tool.act_bulk({"ids": ids, "op": "my_day", "value": False})
+        self.assertEqual(self.tool.act_board({"view": "my_day"})["shown"], 0)
+
+    def test_bulk_move_to_list(self):
+        target = self.tool.act_add_list({"name": "工作"})["list"]
+        ids = [t["id"] for t in self._make("甲", "乙")]
+        result = self.tool.act_bulk({"ids": ids, "op": "move", "value": target["id"]})
+        self.assertEqual(result["changed"], 2)
+        # 「全部任务」是跨清单汇总，所以要看具体的清单视图
+        self.assertEqual(self._titles({"view": "list", "list_id": model.DEFAULT_LIST_ID}), [])
+        moved = self.tool.act_board({"view": "list", "list_id": target["id"]})
+        self.assertEqual([t["title"] for g in moved["groups"] for t in g["tasks"]],
+                         ["甲", "乙"])
+
+        # 已经是目标清单：不算改动
+        again = self.tool.act_bulk({"ids": ids, "op": "move", "value": target["id"]})
+        self.assertEqual(again["changed"], 0)
+
+    def test_bulk_remove_goes_to_trash(self):
+        ids = [t["id"] for t in self._make("甲", "乙", "丙")]
+        result = self.tool.act_bulk({"ids": ids[:2], "op": "remove"})
+        self.assertEqual(result["changed"], 2)
+        self.assertEqual(self._titles(), ["丙"])
+        self.assertEqual(self._titles("trash"), ["甲", "乙"])
+
+    def test_bulk_ignores_unknown_ids(self):
+        ids = [t["id"] for t in self._make("甲")]
+        result = self.tool.act_bulk({"ids": ids + ["不存在", ids[0]], "op": "done",
+                                     "value": True})
+        self.assertEqual(result["selected"], 1)      # 重复 id 已去重
+        self.assertEqual(result["changed"], 1)
+
+    def test_bulk_all_ids_gone_is_not_an_error(self):
+        self._make("甲")
+        result = self.tool.act_bulk({"ids": ["早就没了"], "op": "done", "value": True})
+        self.assertEqual(result["selected"], 0)
+
+    def test_bulk_validates_target_list_even_when_nothing_selected(self):
+        """清单校验要在"选中集为空就返回"之前 —— 否则调用方的 bug 会被静默吞掉。"""
+        self._make("甲")
+        with self.assertRaises(ToolError):
+            self.tool.act_bulk({"ids": ["早就没了"], "op": "move", "value": "没这个清单"})
+
+    def test_bulk_writes_file_once(self):
+        """批量必须一次读写 —— 否则 N 条就是 N 次全量写盘。"""
+        ids = [t["id"] for t in self._make("甲", "乙", "丙", "丁", "戊")]
+        calls = []
+        original = store.save
+
+        def counting(data):
+            calls.append(1)
+            return original(data)
+
+        store.save = counting
+        try:
+            self.tool.act_bulk({"ids": ids, "op": "done", "value": True})
+        finally:
+            store.save = original
+        self.assertEqual(len(calls), 1)
+
+    def test_bulk_guards(self):
+        ids = [t["id"] for t in self._make("甲")]
+        with self.assertRaises(ToolError):
+            self.tool.act_bulk({"ids": ids, "op": "不存在"})
+        with self.assertRaises(ToolError):
+            self.tool.act_bulk({"ids": ids, "op": ""})
+        with self.assertRaises(ToolError):
+            self.tool.act_bulk({"ids": "不是列表", "op": "done"})
+        with self.assertRaises(ToolError):
+            self.tool.act_bulk({"ids": [], "op": "done"})
+        with self.assertRaises(ToolError):
+            self.tool.act_bulk({"ids": ["  "], "op": "done"})
+        with self.assertRaises(ToolError):
+            self.tool.act_bulk({"ids": ids, "op": "move", "value": "没有这个清单"})
+        with self.assertRaises(ToolError):
+            self.tool.act_bulk({"ids": ["x%d" % i for i in range(600)], "op": "done"})
+
+    def test_bulk_cannot_touch_trash(self):
+        """回收站里的任务不能被批量操作碰到（它们不在 tasks 里）。"""
+        ids = [t["id"] for t in self._make("甲")]
+        self.tool.act_remove({"id": ids[0]})
+        result = self.tool.act_bulk({"ids": ids, "op": "important", "value": True})
+        self.assertEqual(result["selected"], 0)
+        self.assertEqual(self._titles("trash"), ["甲"])
+
     def test_reorder_lists(self):
         first = self.tool.act_add_list({"name": "甲"})["list"]
         second = self.tool.act_add_list({"name": "乙"})["list"]

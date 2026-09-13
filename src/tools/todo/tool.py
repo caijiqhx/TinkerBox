@@ -20,6 +20,14 @@ from tools.todo import model, store
 #: 可被 update 修改的字段
 UPDATABLE = ("title", "note", "due", "my_day", "important", "list_id", "tags", "status")
 
+#: 批量操作支持的动作（值都表示"设成什么"，而不是"切换" ——
+#: 一批任务里有的已完成有的没完成时，"切换"的语义是不确定的）
+BULK_OPS = ("done", "important", "my_day", "move", "remove")
+
+#: 单次批量的上限。不是性能考虑（几百条也就是一次全量写），
+#: 而是防手滑：全选之后误点删除时，回收站里一次涌入几千条很难收拾。
+MAX_BULK = 500
+
 
 class TodoTool(Tool):
     meta = ToolMeta(
@@ -390,6 +398,88 @@ class TodoTool(Tool):
         self._persist(data)
         return {"removed": len(done)}
 
+    def act_bulk(self, payload):
+        """批量操作多条任务，**一次读写**。
+
+        为什么不让前端循环调用单条 action：N 条就是 N 次全量写盘 + N 次全量刷新，
+        而且中途哪一次失败，数据会停在"改了一半"的状态。
+
+        语义要点：
+        - 所有 op 都是"设成指定值"而不是"切换"，见 BULK_OPS 的注释；
+        - 找不到的 id 直接忽略（可能刚被别处删掉），不算错误；
+        - 回收站里的任务不在 data["tasks"] 里，天然不会被批量操作碰到。
+        """
+        op = str(payload.get("op") or "").strip()
+        if op not in BULK_OPS:
+            raise ToolError("不支持的批量操作：%s" % (op or "(空)",))
+
+        raw = payload.get("ids")
+        if not isinstance(raw, (list, tuple)):
+            raise ToolError("ids 必须是列表")
+
+        wanted = []
+        for value in raw:
+            key = str(value or "").strip()
+            if key and key not in wanted:
+                wanted.append(key)
+        if not wanted:
+            raise ToolError("没有选中任何任务")
+        if len(wanted) > MAX_BULK:
+            raise ToolError("一次最多处理 %d 条" % (MAX_BULK,))
+
+        value = payload.get("value")
+        target = str(value or "").strip() if op == "move" else ""
+
+        data = store.load()
+        # 清单校验必须放在"选中集为空就直接返回"之前 ——
+        # 否则传了不存在的清单、又恰好选中集为空时会被静默吞掉，
+        # 调用方会以为移动成功了。
+        if op == "move" and self._find_list(data["lists"], target) is None:
+            raise ToolError("清单不存在：%s" % (target,))
+
+        tasks = [t for t in data["tasks"] if t.get("id") in wanted]
+        if not tasks:
+            # 选中的都被删掉了：当作无事发生，不报错（前端会刷新成最新状态）
+            return {"op": op, "changed": 0, "selected": 0}
+
+        changed = 0
+
+        if op == "remove":
+            data["tasks"] = [t for t in data["tasks"] if t.get("id") not in wanted]
+            changed = self._to_trash(data["trash"], tasks)
+        elif op == "move":
+            for task in tasks:
+                if (task.get("list_id") or model.DEFAULT_LIST_ID) != target:
+                    task["list_id"] = target
+                    self._touch(task)
+                    changed += 1
+        elif op == "done":
+            want = model.as_bool(value)
+            target = model.STATUS_DONE if want else model.STATUS_TODO
+            for task in tasks:
+                if task.get("status") != target:
+                    self._set_status(task, target)
+                    self._touch(task)
+                    changed += 1
+        elif op == "important":
+            want = model.as_bool(value)
+            for task in tasks:
+                if bool(task.get("important")) != want:
+                    task["important"] = want
+                    self._touch(task)
+                    changed += 1
+        elif op == "my_day":
+            want = model.as_bool(value)
+            mark = model.today_text() if want else ""
+            for task in tasks:
+                if (task.get("my_day") or "") != mark:
+                    task["my_day"] = mark
+                    self._touch(task)
+                    changed += 1
+
+        self._persist(data)
+        return {"op": op, "changed": changed, "selected": len(tasks)}
+
     # ==================================================================
     # 步骤
     # ==================================================================
@@ -592,6 +682,7 @@ class TodoTool(Tool):
             "toggle_my_day": self.act_toggle_my_day,
             "remove": self.act_remove,
             "clear_done": self.act_clear_done,
+            "bulk": self.act_bulk,
             "add_step": self.act_add_step,
             "toggle_step": self.act_toggle_step,
             "update_step": self.act_update_step,

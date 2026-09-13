@@ -16,7 +16,7 @@
   var el = null;
 
   var shell = null, railBox = null, headBox = null, listBox = null, detailBox = null;
-  var stepsBox = null, searchInput = null;
+  var stepsBox = null, searchInput = null, addInput = null, bulkBox = null, pickBtn = null;
 
   var state = {
     view: "my_day",
@@ -26,7 +26,9 @@
     selected: null,
     stepDraft: "",
     renaming: false,       /* 刚建完清单：下一次渲染要把标题输入框聚焦起来 */
-    dragListId: null       /* 正在被拖动的清单 id */
+    dragListId: null,      /* 正在被拖动的清单 id */
+    picking: false,        /* 多选模式 */
+    picked: []             /* 多选模式下已勾选的任务 id（按勾选先后） */
   };
 
   var VIEW_META = {
@@ -148,6 +150,7 @@
         renderHead();
         renderRail();
         renderList();
+        renderBulkBar();
         renderDetail();
       });
       return data;
@@ -320,8 +323,12 @@
   function goView(view) {
     state.view = view;
     if (view !== "list") { state.listId = "default"; }
-    if (view === "trash") { state.selected = null; }   // 回收站里不做选中，也就没有详情
+    if (view === "trash") {
+      state.selected = null;             // 回收站里不做选中，也就没有详情
+      state.picking = false;             // 回收站的任务不能批量改，直接退出多选
+    }
     state.keyword = "";
+    state.picked = [];                   // 列表换了，之前勾选的可能是看不见的任务
     if (searchInput) { searchInput.value = ""; }
     refresh();
   }
@@ -330,6 +337,7 @@
     state.view = "list";
     state.listId = listId;
     state.keyword = "";
+    state.picked = [];
     if (searchInput) { searchInput.value = ""; }
     refresh();
   }
@@ -589,17 +597,33 @@
 
   function taskRow(task) {
     var done = task.status === "done";
+    var picking = state.picking;
     var row = el("div", {
-      class: "task" + (done ? " done" : "") + (isSelected(task) ? " active" : "")
+      class: "task" + (done ? " done" : "")
+            + (isSelected(task) ? " active" : "")
+            + (picking && isPicked(task) ? " picked" : "")
     });
 
-    var check = el("input", {
-      class: "check",
-      type: "checkbox",
-      title: done ? "标记为未完成" : "标记为已完成",
-      onchange: function () { act("toggle", { id: task.id }); }
-    });
-    if (done) { check.checked = true; }
+    /* 多选模式下，行首的复选框换成"选择框"。位置一样但含义不同，
+       标题也换掉 —— 否则用户分不清点哪个是"完成"、点哪个是"选中"。 */
+    var check;
+    if (picking) {
+      check = el("input", {
+        class: "check pick",
+        type: "checkbox",
+        title: "选中这条",
+        onchange: function () { togglePick(task.id); }
+      });
+      if (isPicked(task)) { check.checked = true; }
+    } else {
+      check = el("input", {
+        class: "check",
+        type: "checkbox",
+        title: done ? "标记为未完成" : "标记为已完成",
+        onchange: function () { act("toggle", { id: task.id }); }
+      });
+      if (done) { check.checked = true; }
+    }
     row.appendChild(check);
 
     var meta = el("div", { class: "task-meta" });
@@ -621,8 +645,10 @@
     var title = el("div", { class: "task-title" }, [highlight(task.title, state.keyword)]);
     var main = el("div", {
       class: "task-main",
-      title: "点击查看详情",
-      onclick: function () { selectTask(task); }
+      title: picking ? "点击选中 / 取消选中" : "点击查看详情",
+      onclick: function () {
+        if (picking) { togglePick(task.id); } else { selectTask(task); }
+      }
     }, [title]);
     if (meta.children.length) { main.appendChild(meta); }
     row.appendChild(main);
@@ -648,7 +674,7 @@
           ctx.confirm({
             title: "删除任务",
             message: "删除「" + task.title + "」？",
-            detail: "删除后无法撤销。",
+            detail: "删除后会移到回收站，可随时恢复。",
             okText: "删除",
             danger: true
           }).then(function (ok) {
@@ -760,6 +786,189 @@
     renderDetail();
   }
 
+  /* ================= 多选与批量操作 ================= */
+
+  /* 勾选是**纯本地状态**：不请求后端，只重绘列表与操作条 —— 所以点起来是即时的。
+     它和行首那个复选框必须互斥：那个是"完成任务"，两个复选框会让人分不清。
+     所以多选模式下，行首的复选框被换成选择框（同一个位置，不同的含义）。 */
+  function isPicked(task) {
+    return state.picked.indexOf(task.id) >= 0;
+  }
+
+  function visibleIds() {
+    var ids = [];
+    var groups = (state.board && state.board.groups) || [];
+    for (var i = 0; i < groups.length; i++) {
+      var tasks = groups[i].tasks || [];
+      for (var j = 0; j < tasks.length; j++) { ids.push(tasks[j].id); }
+    }
+    return ids;
+  }
+
+  /* id -> 任务。勾选只存 id，需要看字段时（"是否全都标星了"）才建这张表。 */
+  function taskMap() {
+    var map = {};
+    var groups = (state.board && state.board.groups) || [];
+    for (var i = 0; i < groups.length; i++) {
+      var tasks = groups[i].tasks || [];
+      for (var j = 0; j < tasks.length; j++) { map[tasks[j].id] = tasks[j]; }
+    }
+    return map;
+  }
+
+  function togglePick(id) {
+    var at = state.picked.indexOf(id);
+    if (at >= 0) { state.picked.splice(at, 1); } else { state.picked.push(id); }
+    renderList();
+    renderBulkBar();
+  }
+
+  function allPicked() {
+    var ids = visibleIds();
+    if (!ids.length) { return false; }
+    for (var i = 0; i < ids.length; i++) {
+      if (state.picked.indexOf(ids[i]) < 0) { return false; }
+    }
+    return true;
+  }
+
+  /* 选中的是否**全都**满足某条件 —— 决定按钮是"标为 X"还是"取消 X"。
+     混合状态下一律取"标为"，因为那是更有用的方向。 */
+  function pickedAll(test) {
+    var map = taskMap();
+    if (!state.picked.length) { return false; }
+    for (var i = 0; i < state.picked.length; i++) {
+      var task = map[state.picked[i]];
+      if (!task || !test(task)) { return false; }
+    }
+    return true;
+  }
+
+  function setPicking(on) {
+    state.picking = on;
+    state.picked = [];
+    renderList();
+    renderBulkBar();      // 按钮文案也由 renderBulkBar 统一同步，避免两处各写一遍
+  }
+
+  /* 批量动作统一走这里：一次请求 + 一次读写（后端 act_bulk）。 */
+  function bulkRun(op, value) {
+    if (!state.picked.length) { return; }
+    act("bulk", { ids: state.picked.slice(), op: op, value: value })
+      .then(function (result) {
+        if (!result) { return; }          // 失败时保留选择，用户可以重试
+        state.picked = [];
+        renderList();
+        renderBulkBar();
+      });
+  }
+
+  /* 「移到清单」用一个只有清单按钮的小弹层 —— 复用外壳的 openModal，
+     不必为它新增一套选择控件。在清单视图里，当前清单会被标出并禁用。 */
+  function movePicked() {
+    var lists = (state.board && state.board.lists) || [];
+    var current = state.view === "list" ? state.listId : "";
+    var box = el("div", { class: "move-pick" });
+
+    for (var i = 0; i < lists.length; i++) {
+      (function (item) {
+        var here = (item.id === current);
+        box.appendChild(el("button", {
+          class: "btn block ghost" + (here ? " on" : ""),
+          text: item.name + (here ? "（当前清单）" : ""),
+          disabled: here ? "disabled" : null,
+          onclick: here ? null : function () {
+            ctx.closeModal();
+            bulkRun("move", item.id);
+          }
+        }));
+      })(lists[i]);
+    }
+    ctx.openModal("移到清单", box);
+  }
+
+  function renderBulkBar() {
+    if (!bulkBox) { return; }
+    ctx.clear(bulkBox);
+
+    // 回收站里的任务不能被批量改动，那里不提供多选
+    var canPick = state.view !== "trash";
+    if (!canPick) { state.picking = false; }
+    if (pickBtn) {
+      // 文案与可见性都从这里出：否则"在多选模式下切到回收站"会让文案
+      // 永远停在「退出多选」，而实际已经不在多选模式了
+      pickBtn.style.display = canPick ? "" : "none";
+      pickBtn.textContent = state.picking ? "退出多选" : "多选";
+    }
+
+    if (addInput) { addInput.style.display = state.picking ? "none" : ""; }
+    bulkBox.style.display = state.picking ? "" : "none";
+    renderShellClass();
+    if (!state.picking) { return; }
+
+    var count = state.picked.length;
+    var on = count > 0;
+    var every = allPicked();
+    var doneAll = pickedAll(function (t) { return t.status === "done"; });
+    var starAll = pickedAll(function (t) { return t.important; });
+    var dayAll = pickedAll(function (t) { return inMyDay(t); });
+
+    function opButton(text, title, run, extra) {
+      return el("button", {
+        class: "btn small ghost" + (extra ? " " + extra : ""),
+        text: text,
+        title: title,
+        disabled: on ? null : "disabled",
+        onclick: on ? run : null
+      });
+    }
+
+    bulkBox.appendChild(el("div", { class: "bulk-bar" }, [
+      el("span", { class: "bulk-count", text: "已选 " + count + " 条" }),
+      el("button", {
+        class: "btn small ghost",
+        text: every ? "取消全选" : "全选",
+        title: "对当前列表里显示的任务全选",
+        onclick: function () {
+          state.picked = every ? [] : visibleIds();
+          renderList();
+          renderBulkBar();
+        }
+      }),
+      el("span", { class: "bulk-sep" }),
+      opButton(doneAll ? "取消完成" : "标记完成", "批量修改完成状态",
+               function () { bulkRun("done", !doneAll); }),
+      opButton(starAll ? "取消重要" : "标为重要", "批量修改星标",
+               function () { bulkRun("important", !starAll); }),
+      opButton(dayAll ? "移出我的一天" : "加入我的一天", "批量加入或移出「我的一天」",
+               function () { bulkRun("my_day", !dayAll); }),
+      opButton("移到清单…", "把选中的任务移到另一个清单", movePicked),
+      opButton("删除", "选中的任务会移到回收站，可以恢复", function () {
+        ctx.confirm({
+          title: "批量删除",
+          message: "删除选中的 " + count + " 条任务？",
+          detail: "删除后会移到回收站，可随时恢复。",
+          okText: "删除",
+          danger: true
+        }).then(function (ok) { if (ok) { bulkRun("remove", true); } });
+      }, "danger"),
+      el("span", { class: "bulk-sep" }),
+      el("button", {
+        class: "btn small ghost",
+        text: "退出多选",
+        onclick: function () { setPicking(false); }
+      })
+    ]));
+  }
+
+  /* shell 上的类控制两件事：没有选中任务时收起右栏、多选模式下灰掉行内按钮 */
+  function renderShellClass() {
+    if (!shell) { return; }
+    shell.className = "todo-shell"
+      + (state.selected ? "" : " without-detail")
+      + (state.picking ? " picking" : "");
+  }
+
   /* ================= 右栏：详情 ================= */
 
   function removeFrom(list, value) {
@@ -783,7 +992,7 @@
   function renderDetail() {
     if (!detailBox) { return; }
     ctx.clear(detailBox);
-    shell.className = "todo-shell" + (state.selected ? "" : " without-detail");
+    renderShellClass();
 
     var task = state.selected;
     if (!task) {
@@ -1090,13 +1299,15 @@
     state.stepDraft = "";
     state.renaming = false;
     state.dragListId = null;
+    state.picking = false;
+    state.picked = [];
 
     shell = el("div", { class: "todo-shell without-detail" });
     railBox = el("div", { class: "rail" });
     headBox = el("div", { class: "list-head" });
 
     /* 工具栏只建一次 —— 否则每次按键触发刷新都会重建输入框、导致失焦 */
-    var addInput = el("input", {
+    addInput = el("input", {
       class: "input grow",
       type: "text",
       placeholder: "添加任务，回车确定"
@@ -1117,17 +1328,29 @@
     });
     searchInput.addEventListener("input", function () {
       state.keyword = String(searchInput.value || "").trim();
+      state.picked = [];        // 搜索会换掉整个列表，之前勾选的可能是看不见的任务
       refresh();
+    });
+
+    pickBtn = el("button", {
+      class: "btn ghost",
+      text: "多选",
+      title: "批量操作：勾选多条任务后统一处理",
+      onclick: function () { setPicking(!state.picking); }
     });
 
     var toolbar = el("div", { class: "toolbar" }, [
       addInput,
-      searchInput
+      searchInput,
+      pickBtn
     ]);
+
+    bulkBox = el("div", { class: "bulk-box" });
 
     var mainCol = el("div", { class: "main-col" }, [
       headBox,
       toolbar,
+      bulkBox,
       (listBox = el("div", { class: "list" }))
     ]);
 
@@ -1155,6 +1378,7 @@
     if (ctx && ctx.dialogOpen && ctx.dialogOpen()) { return; }
     var tag = (event.target && event.target.tagName) || "";
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") { return; }
+    if (state.picking) { setPicking(false); return; }
     if (!state.selected) { return; }
     state.selected = null;
     renderList();

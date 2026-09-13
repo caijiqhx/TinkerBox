@@ -267,6 +267,40 @@ body {
   margin-bottom: 16px;
 }
 
+/* ---------------- 批量操作条 ---------------- */
+
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-bg);
+}
+
+.bulk-count { font-size: 13px; font-weight: 600; color: var(--accent); }
+.bulk-sep { width: 1px; height: 16px; background: var(--border); margin: 0 3px; }
+.bulk-bar .bulk-grow { flex: 1; min-width: 0; }
+
+/* 多选模式下，行内的快捷按钮让位 —— 那些是"对单条操作"，此刻只会误点 */
+.todo-shell.picking .task-actions { display: none; }
+/* 选中行给一个整行的底色，而不是只染复选框 */
+.task.picked { background: var(--accent-bg); }
+.check.pick { border-radius: 3px; }
+
+/* 「移到清单」的小弹层：就是一个清单按钮列表 */
+.move-pick { display: flex; flex-direction: column; gap: 6px; }
+.move-pick .btn {
+  text-align: left;
+  justify-content: flex-start;
+  border-radius: var(--radius-sm);
+}
+.move-pick .btn.on { border-color: var(--accent); color: var(--accent); }
+.move-pick .btn[disabled] { opacity: .55; cursor: default; }
+
 .grow { flex: 1; min-width: 120px; }
 
 /* ---------------- 列表 ---------------- */
