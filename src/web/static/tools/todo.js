@@ -29,10 +29,12 @@
   };
 
   var VIEW_META = {
+    all:       { icon: "▦", label: "全部任务" },
     my_day:    { icon: "☀", label: "我的一天" },
     important: { icon: "★", label: "重要" },
     planned:   { icon: "◷", label: "已计划" },
-    completed: { icon: "✓", label: "已完成" }
+    completed: { icon: "✓", label: "已完成" },
+    trash:     { icon: "♻", label: "回收站" }
   };
 
   var WEEKDAY = "日一二三四五六";
@@ -217,6 +219,7 @@
   function goView(view) {
     state.view = view;
     if (view !== "list") { state.listId = "default"; }
+    if (view === "trash") { state.selected = null; }   // 回收站里不做选中，也就没有详情
     state.keyword = "";
     if (searchInput) { searchInput.value = ""; }
     refresh();
@@ -238,7 +241,7 @@
     var views = board.views || {};
     var lists = board.lists || [];
 
-    var order = ["my_day", "important", "planned"];
+    var order = ["my_day", "important", "planned", "all"];
     for (var i = 0; i < order.length; i++) {
       (function (key) {
         var meta = VIEW_META[key];
@@ -285,6 +288,14 @@
       count: views.completed || 0,
       active: state.view === "completed",
       onclick: function () { goView("completed"); }
+    }));
+    railBox.appendChild(railItem({
+      icon: VIEW_META.trash.icon,
+      label: VIEW_META.trash.label,
+      count: views.trash || 0,
+      active: state.view === "trash",
+      title: "删掉的任务会先放在这里",
+      onclick: function () { goView("trash"); }
     }));
   }
 
@@ -351,7 +362,24 @@
     var shown = (board.shown === undefined) ? 0 : board.shown;
     sub = (sub ? sub + " · " : "") + shown + " 项";
 
-    if (state.view === "completed" && shown) {
+    if (state.view === "trash" && shown) {
+      headBox.appendChild(el("div", { class: "list-sub", text: sub }));
+      headBox.appendChild(el("button", {
+        class: "btn small ghost danger",
+        text: "清空回收站",
+        onclick: function () {
+          ctx.confirm({
+            title: "清空回收站",
+            message: "彻底删除回收站里的 " + shown + " 项？",
+            detail: "这一步不可恢复，也不会再进回收站。",
+            okText: "清空",
+            danger: true
+          }).then(function (ok) {
+            if (ok) { act("empty_trash", {}); }
+          });
+        }
+      }));
+    } else if (state.view === "completed" && shown) {
       headBox.appendChild(el("div", { class: "list-sub", text: sub }));
       headBox.appendChild(el("button", {
         class: "btn small ghost",
@@ -517,6 +545,55 @@
     return row;
   }
 
+  /* 回收站里的行：只提供「恢复」和「彻底删除」。
+     不勾选、不标星、也不点开详情 —— 想改就先恢复，避免在垃圾桶里编辑。 */
+  function trashRow(task) {
+    var row = el("div", { class: "task trash" });
+
+    var meta = el("div", { class: "task-meta" });
+    meta.appendChild(el("span", {
+      class: "chip",
+      text: "删除于 " + (task.deleted_at || "未知时间"),
+      title: task.deleted_at || ""
+    }));
+    if (task.due) { meta.appendChild(dueChip(task)); }
+    var tags = tagChips(task, 3);
+    for (var ti = 0; ti < tags.length; ti++) { meta.appendChild(tags[ti]); }
+
+    var main = el("div", { class: "task-main" }, [
+      el("div", { class: "task-title" }, [highlight(task.title, "")])
+    ]);
+    if (meta.children.length) { main.appendChild(meta); }
+    row.appendChild(main);
+
+    row.appendChild(el("div", { class: "task-actions always" }, [
+      el("button", {
+        class: "ico-btn",
+        text: "↩",
+        title: "恢复这条任务",
+        onclick: function () { act("restore", { id: task.id }); }
+      }),
+      el("button", {
+        class: "ico-btn",
+        text: "✕",
+        title: "彻底删除（不可恢复）",
+        onclick: function () {
+          ctx.confirm({
+            title: "彻底删除",
+            message: "彻底删除「" + task.title + "」？",
+            detail: "这一步不可恢复，也不会再进回收站。",
+            okText: "彻底删除",
+            danger: true
+          }).then(function (ok) {
+            if (ok) { act("purge", { id: task.id }); }
+          });
+        }
+      })
+    ]));
+
+    return row;
+  }
+
   function renderList() {
     if (!listBox) { return; }
     ctx.clear(listBox);
@@ -542,17 +619,19 @@
       }
       var tasks = group.tasks || [];
       for (var j = 0; j < tasks.length; j++) {
-        listBox.appendChild(taskRow(tasks[j]));
+        listBox.appendChild(state.view === "trash" ? trashRow(tasks[j]) : taskRow(tasks[j]));
       }
     }
   }
 
   function emptyHint() {
     if (state.keyword) { return "没有匹配「" + state.keyword + "」的任务"; }
+    if (state.view === "trash") { return "回收站是空的\n删掉的任务会先放到这里，默认保留 30 天"; }
     if (state.view === "my_day") { return "今天还没有安排任务，用任务上的 ☀ 按钮加进来"; }
     if (state.view === "important") { return "还没有标星的任务"; }
     if (state.view === "planned") { return "还没有设置到期日的任务"; }
     if (state.view === "completed") { return "还没有已完成的任务"; }
+    if (state.view === "all") { return "所有任务都完成了，休息一下"; }
     return "这个清单还是空的，在上面输入一条吧";
   }
 
@@ -592,7 +671,9 @@
     if (!task) {
       detailBox.appendChild(el("div", {
         class: "detail-empty",
-        html: "点击左侧任务查看详情<br>步骤 · 到期日 · 备注"
+        html: state.view === "trash"
+          ? "回收站里的任务不能直接编辑<br>先「恢复」再修改"
+          : "点击左侧任务查看详情<br>步骤 · 到期日 · 备注"
       }));
       return;
     }

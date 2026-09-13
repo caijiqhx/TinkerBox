@@ -79,13 +79,15 @@ class TodoTool(Tool):
         return {"total": len(tasks), "active": len(tasks) - done, "done": done}
 
     @staticmethod
-    def _view_counts(tasks):
+    def _view_counts(tasks, trash=None):
         today = model.today_text()
-        counts = {"my_day": 0, "important": 0, "planned": 0, "completed": 0}
+        counts = {"all": 0, "my_day": 0, "important": 0, "planned": 0,
+                  "completed": 0, "trash": len(trash or [])}
         for task in tasks:
             if task.get("status") == model.STATUS_DONE:
                 counts["completed"] += 1
                 continue
+            counts["all"] += 1
             if task.get("my_day") == today:
                 counts["my_day"] += 1
             if task.get("important"):
@@ -124,6 +126,9 @@ class TodoTool(Tool):
 
         if view == model.VIEW_COMPLETED:
             chosen = [t for t in tasks if t.get("status") == model.STATUS_DONE]
+        elif view == model.VIEW_ALL:
+            # 所有未完成任务，跨清单 —— 任务分散在多个清单时不用挨个点
+            chosen = [t for t in tasks if t.get("status") != model.STATUS_DONE]
         elif view == model.VIEW_MY_DAY:
             chosen = [t for t in tasks
                       if t.get("status") != model.STATUS_DONE
@@ -226,6 +231,7 @@ class TodoTool(Tool):
     def act_board(self, payload):
         data = store.load()
         lists, tasks = data["lists"], data["tasks"]
+        trash = data.get("trash") or []
 
         view = str(payload.get("view") or model.VIEW_MY_DAY).strip()
         if view not in model.VIEWS:
@@ -236,14 +242,20 @@ class TodoTool(Tool):
             list_id = model.DEFAULT_LIST_ID
 
         keyword = str(payload.get("keyword") or "").strip().lower()
-        selected = self._select(tasks, view, list_id, keyword)
-
         title = ""
-        if view == model.VIEW_LIST:
-            item = self._find_list(lists, list_id)
-            title = item["name"] if item else model.DEFAULT_LIST_NAME
-        if keyword:
-            title = "搜索：%s" % (keyword,)
+
+        if view == model.VIEW_TRASH:
+            # 回收站是另一份数据，不走 _select（那边的任务是"活的"）
+            selected = sorted(trash, key=lambda t: t.get("deleted_at") or "", reverse=True)
+            groups = [{"key": "all", "label": "", "tasks": selected}] if selected else []
+        else:
+            selected = self._select(tasks, view, list_id, keyword)
+            groups = self._group(selected, view, bool(keyword))
+            if view == model.VIEW_LIST:
+                item = self._find_list(lists, list_id)
+                title = item["name"] if item else model.DEFAULT_LIST_NAME
+            if keyword:
+                title = "搜索：%s" % (keyword,)
 
         return {
             "view": view,
@@ -252,8 +264,8 @@ class TodoTool(Tool):
             "today": model.today_text(),
             "presets": model.due_presets(),        # 到期日快捷项（口径在 model 里统一）
             "lists": self._lists_with_counts(lists, tasks),
-            "views": self._view_counts(tasks),
-            "groups": self._group(selected, view, bool(keyword)),
+            "views": self._view_counts(tasks, trash),
+            "groups": groups,
             "shown": len(selected),
             "stats": self._stats(tasks),
             "store": store.path_text(),
@@ -349,21 +361,34 @@ class TodoTool(Tool):
         self._persist(data)
         return {"task": task}
 
+    @staticmethod
+    def _to_trash(trash, tasks):
+        """把要删的任务打上删除时间并挪进回收站。
+
+        所有删除路径（单条删除、清理已完成）都走这里 ——
+        "删除"在这个工具里永远是软删除，彻底清除只能从回收站里显式做。
+        """
+        stamp = model.now_text()
+        for task in tasks:
+            task["deleted_at"] = stamp
+            trash.append(task)
+        return len(tasks)
+
     def act_remove(self, payload):
         data = store.load()
         task = self._find_task(data["tasks"], payload.get("id"))
-        remain = [t for t in data["tasks"] if t.get("id") != task.get("id")]
-        data["tasks"] = remain
+        data["tasks"] = [t for t in data["tasks"] if t.get("id") != task.get("id")]
+        self._to_trash(data["trash"], [task])
         self._persist(data)
         return {"removed": task.get("id")}
 
     def act_clear_done(self, payload):
         data = store.load()
-        remain = [t for t in data["tasks"] if t.get("status") != model.STATUS_DONE]
-        removed = len(data["tasks"]) - len(remain)
-        data["tasks"] = remain
+        done = [t for t in data["tasks"] if t.get("status") == model.STATUS_DONE]
+        data["tasks"] = [t for t in data["tasks"] if t.get("status") != model.STATUS_DONE]
+        self._to_trash(data["trash"], done)
         self._persist(data)
-        return {"removed": removed}
+        return {"removed": len(done)}
 
     # ==================================================================
     # 步骤
@@ -474,6 +499,49 @@ class TodoTool(Tool):
         return {"removed": list_id, "moved": moved}
 
     # ==================================================================
+    # 回收站
+    # ==================================================================
+    @staticmethod
+    def _find_trashed(trash, task_id):
+        wanted = str(task_id or "").strip()
+        if not wanted:
+            raise ToolError("缺少任务 id")
+        for task in trash:
+            if task.get("id") == wanted:
+                return task
+        raise ToolError("回收站里找不到该任务：%s" % (wanted,))
+
+    def act_restore(self, payload):
+        """从回收站恢复一条。原清单若已被删掉，就落回默认清单。"""
+        data = store.load()
+        trash = data["trash"]
+        task = self._find_trashed(trash, payload.get("id"))
+
+        if self._find_list(data["lists"], task.get("list_id")) is None:
+            task["list_id"] = model.DEFAULT_LIST_ID
+        task["deleted_at"] = ""
+        trash.remove(task)
+        data["tasks"].append(task)
+        self._persist(data)
+        return {"task": task}
+
+    def act_purge(self, payload):
+        """从回收站彻底删除一条 —— 不可恢复。"""
+        data = store.load()
+        task = self._find_trashed(data["trash"], payload.get("id"))
+        data["trash"] = [t for t in data["trash"] if t.get("id") != task["id"]]
+        self._persist(data)
+        return {"purged": task["id"]}
+
+    def act_empty_trash(self, payload):
+        """清空回收站 —— 不可恢复。"""
+        data = store.load()
+        removed = len(data["trash"])
+        data["trash"] = []
+        self._persist(data)
+        return {"removed": removed}
+
+    # ==================================================================
     def act_stats(self, payload):
         data = store.load()
         return {
@@ -499,6 +567,9 @@ class TodoTool(Tool):
             "add_list": self.act_add_list,
             "rename_list": self.act_rename_list,
             "remove_list": self.act_remove_list,
+            "restore": self.act_restore,
+            "purge": self.act_purge,
+            "empty_trash": self.act_empty_trash,
             "stats": self.act_stats,
         }
 

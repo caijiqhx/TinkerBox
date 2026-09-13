@@ -365,6 +365,147 @@ class TodoToolTest(unittest.TestCase):
         self.assertEqual(len(landed), 1, landed)
         self.assertIn(landed[0], ("today", "week"), landed)
 
+    # ---------------------------------------------------------------- 全部任务
+    def test_all_view_spans_lists_and_excludes_completed(self):
+        work = self.tool.act_add_list({"name": "工作"})["list"]
+        first = self.tool.act_add({"title": "默认清单里的"})["task"]
+        self.tool.act_add({"title": "工作清单里的", "list_id": work["id"]})
+
+        board = self.tool.act_board({"view": "all"})
+        titles = sorted(t["title"] for g in board["groups"] for t in g["tasks"])
+        self.assertEqual(titles, ["工作清单里的", "默认清单里的"])
+        self.assertEqual(board["views"]["all"], 2)
+
+        # 完成的不算在"全部任务"里（那是「已完成」视图的事）
+        self.tool.act_toggle({"id": first["id"]})
+        board = self.tool.act_board({"view": "all"})
+        self.assertEqual([t["title"] for g in board["groups"] for t in g["tasks"]],
+                         ["工作清单里的"])
+        self.assertEqual(board["views"]["all"], 1)
+        self.assertEqual(board["views"]["completed"], 1)
+
+    # ---------------------------------------------------------------- 回收站
+    def test_remove_goes_to_trash(self):
+        task = self.tool.act_add({"title": "手滑删掉的"})["task"]
+        self.tool.act_remove({"id": task["id"]})
+
+        board = self.tool.act_board({"view": "all"})
+        self.assertEqual(board["shown"], 0)
+        self.assertEqual(board["stats"]["total"], 0)
+        self.assertEqual(board["views"]["trash"], 1)
+
+        trash = self.tool.act_board({"view": "trash"})
+        self.assertEqual(trash["shown"], 1)
+        self.assertEqual(trash["groups"][0]["tasks"][0]["title"], "手滑删掉的")
+        self.assertTrue(trash["groups"][0]["tasks"][0]["deleted_at"])
+
+    def test_trashed_task_is_invisible_everywhere(self):
+        task = self.tool.act_add({"title": "找得到的名字"})["task"]
+        self.tool.act_toggle_important({"id": task["id"]})
+        self.tool.act_update({"id": task["id"],
+                              "fields": {"my_day": _today(), "due": _today(1),
+                                         "tags": ["标记"]}})
+        self.tool.act_remove({"id": task["id"]})
+
+        for view in ("all", "my_day", "important", "planned", "completed"):
+            board = self.tool.act_board({"view": view})
+            ids = [t["id"] for g in board["groups"] for t in g["tasks"]]
+            self.assertNotIn(task["id"], ids, view)
+
+        # 清单计数、搜索都不该把它算进来
+        self.assertEqual(self.tool.act_board({"view": "list"})["lists"][0]["count"], 0)
+        self.assertEqual(self.tool.act_board({"keyword": "找得"})["shown"], 0)
+        self.assertEqual(self.tool.act_board({"keyword": "标记"})["shown"], 0)
+
+    def test_restore_puts_it_back_where_it_was(self):
+        work = self.tool.act_add_list({"name": "工作"})["list"]
+        task = self.tool.act_add({"title": "还要用", "list_id": work["id"]})["task"]
+        self.tool.act_remove({"id": task["id"]})
+
+        restored = self.tool.act_restore({"id": task["id"]})["task"]
+        self.assertEqual(restored["list_id"], work["id"])
+        self.assertEqual(restored["deleted_at"], "")
+
+        board = self.tool.act_board({"view": "all"})
+        self.assertEqual(board["shown"], 1)
+        self.assertEqual(board["views"]["trash"], 0)
+
+    def test_restore_falls_back_when_original_list_is_gone(self):
+        work = self.tool.act_add_list({"name": "临时"})["list"]
+        task = self.tool.act_add({"title": "孤儿", "list_id": work["id"]})["task"]
+        self.tool.act_remove({"id": task["id"]})
+        self.tool.act_remove_list({"list_id": work["id"]})
+
+        restored = self.tool.act_restore({"id": task["id"]})["task"]
+        self.assertEqual(restored["list_id"], model.DEFAULT_LIST_ID)
+
+    def test_purge_and_empty_trash_are_permanent(self):
+        first = self.tool.act_add({"title": "一"})["task"]
+        second = self.tool.act_add({"title": "二"})["task"]
+        self.tool.act_remove({"id": first["id"]})
+        self.tool.act_remove({"id": second["id"]})
+
+        self.assertEqual(self.tool.act_purge({"id": first["id"]})["purged"], first["id"])
+        self.assertEqual(self.tool.act_board({"view": "trash"})["shown"], 1)
+
+        self.assertEqual(self.tool.act_empty_trash({})["removed"], 1)
+        self.assertEqual(self.tool.act_board({"view": "trash"})["shown"], 0)
+
+        # 彻底删掉之后就找不回来了
+        with self.assertRaises(ToolError):
+            self.tool.act_restore({"id": first["id"]})
+        with self.assertRaises(ToolError):
+            self.tool.act_purge({"id": second["id"]})
+
+    def test_clear_done_also_goes_to_trash(self):
+        task = self.tool.act_add({"title": "完成的"})["task"]
+        self.tool.act_toggle({"id": task["id"]})
+        self.tool.act_clear_done({})
+
+        self.assertEqual(self.tool.act_board({"view": "all"})["stats"]["total"], 0)
+        self.assertEqual(self.tool.act_board({"view": "trash"})["shown"], 1)
+
+    def test_trash_survives_restart(self):
+        task = self.tool.act_add({"title": "重启后还在回收站"})["task"]
+        self.tool.act_remove({"id": task["id"]})
+
+        fresh = TodoTool()
+        trash = fresh.act_board({"view": "trash"})
+        self.assertEqual(trash["groups"][0]["tasks"][0]["title"], "重启后还在回收站")
+
+    def test_prune_trash_respects_retention(self):
+        old = {"id": "old", "title": "老条目", "deleted_at": "2000-01-01 00:00:00"}
+        recent = {"id": "new", "title": "刚删的", "deleted_at": model.now_text()}
+
+        kept = store.prune_trash([old, recent], 30)
+        self.assertEqual([t["id"] for t in kept], ["new"])
+
+        # 时间戳坏了就留着 —— 宁可多留，不可误删
+        broken = {"id": "bad", "title": "时间戳坏了", "deleted_at": "不是时间"}
+        self.assertEqual(len(store.prune_trash([broken], 30)), 1)
+
+        # 0 = 永久保留
+        self.assertEqual(len(store.prune_trash([old, recent], 0)), 2)
+
+    def test_v2_data_without_trash_still_loads(self):
+        jsonio.write_json_atomic(store.file_path(), {
+            "version": 2,
+            "lists": [],
+            "tasks": [{"id": "a1", "title": "老任务"}],
+        })
+        data = store.load()
+        self.assertEqual(data["trash"], [])
+        self.assertEqual([t["title"] for t in data["tasks"]], ["老任务"])
+
+    def test_bad_trash_entries_are_dropped(self):
+        jsonio.write_json_atomic(store.file_path(), {
+            "version": 3, "lists": [], "tasks": [],
+            "trash": [{"id": "x"}, {"id": "y", "title": "有效"}, "不是对象"],
+        })
+        trash = store.load()["trash"]
+        self.assertEqual([t["title"] for t in trash], ["有效"])
+        self.assertTrue(trash[0]["deleted_at"])       # 缺时间戳的按"刚删"补上
+
     def test_unknown_task_id(self):
         with self.assertRaises(ToolError):
             self.tool.act_toggle({"id": "not-exist"})

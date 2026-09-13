@@ -38,12 +38,15 @@ MAX_TAGS = 12
 MAX_STEPS = 50
 
 #: 智能视图
+VIEW_ALL = "all"
 VIEW_MY_DAY = "my_day"
 VIEW_IMPORTANT = "important"
 VIEW_PLANNED = "planned"
 VIEW_COMPLETED = "completed"
 VIEW_LIST = "list"
-VIEWS = (VIEW_MY_DAY, VIEW_IMPORTANT, VIEW_PLANNED, VIEW_COMPLETED, VIEW_LIST)
+VIEW_TRASH = "trash"
+VIEWS = (VIEW_ALL, VIEW_MY_DAY, VIEW_IMPORTANT, VIEW_PLANNED,
+         VIEW_COMPLETED, VIEW_LIST, VIEW_TRASH)
 
 
 # ---------------------------------------------------------------- 时间
@@ -98,6 +101,19 @@ def normalize_date(value):
     """规范化为 YYYY-MM-DD；非法一律返回空串（宁可为空，不可留下坏值）。"""
     parsed = parse_date(value)
     return parsed.isoformat() if parsed else ""
+
+
+def parse_stamp(value):
+    """解析 now_text() 写出的时间戳；非法返回 None。"""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    for fmt, size in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d", 10)):
+        try:
+            return datetime.datetime.strptime(text[:size], fmt)
+        except ValueError:
+            continue
+    return None
 
 
 # ---------------------------------------------------------------- 基础清洗
@@ -191,6 +207,7 @@ def make_task(title, list_id=DEFAULT_LIST_ID, important=False,
         "created": stamp,
         "updated": stamp,
         "done_at": "",
+        "deleted_at": "",          # 非空 = 在回收站里（时间戳）
     }
 
 
@@ -273,6 +290,7 @@ def normalize_task(item, valid_list_ids=None):
         "created": stamp,
         "updated": str(item.get("updated") or "") or stamp,
         "done_at": str(item.get("done_at") or ""),
+        "deleted_at": str(item.get("deleted_at") or ""),
     }
 
 

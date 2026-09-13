@@ -601,6 +601,11 @@ body {
 .task-actions { display: flex; gap: 2px; opacity: 0; transition: opacity .14s; }
 .task:hover .task-actions { opacity: 1; }
 
+/* 回收站的行没有复选框，操作按钮得一直露着 —— 否则那个列表看起来是死的 */
+.task-actions.always { opacity: 1; }
+.task.trash .task-main { cursor: default; }
+.task.trash .task-title { color: var(--text-dim); }
+
 .chip {
   font-size: 11px;
   padding: 1px 7px;
