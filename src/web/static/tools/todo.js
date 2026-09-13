@@ -232,11 +232,17 @@
       el("span", { class: "rail-label", text: options.label })
     ]);
 
+    /* 计数与操作按钮共用同一行尾槽位（railslot）：
+       按钮 absolute 不占布局 → 计数永远在行尾，所有行数字对齐。
+       悬停时计数让位、按钮在原位浮现（互斥显示）。
+       只有带按钮的行才有 has-actions 类，避免无按钮的行悬停时空数字。 */
+    var slot = el("span", { class: "rail-slot" });
     if (options.count) {
-      item.appendChild(el("span", { class: "rail-count", text: String(options.count) }));
+      slot.appendChild(el("span", { class: "rail-count", text: String(options.count) }));
     }
+    var actions = [];
     if (options.onPin) {
-      item.appendChild(el("button", {
+      actions.push(el("button", {
         class: "rail-mini pin",
         text: "↑",
         title: "置顶（移到最前）",
@@ -247,7 +253,7 @@
       }));
     }
     if (options.onRemove) {
-      item.appendChild(el("button", {
+      actions.push(el("button", {
         class: "rail-mini",
         text: "✕",
         title: "删除清单",
@@ -256,6 +262,13 @@
           options.onRemove();
         }
       }));
+    }
+    if (actions.length) {
+      slot.classList.add("has-actions");
+      slot.appendChild(el("span", { class: "rail-actions" }, actions));
+    }
+    if (slot.childNodes.length) {
+      item.appendChild(slot);
     }
     return item;
   }

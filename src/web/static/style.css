@@ -545,17 +545,36 @@ body {
   white-space: nowrap;
 }
 
-.rail-count { font-size: 11px; color: var(--text-mute); }
+/* 行尾操作槽：计数与操作按钮共用同一位置（互斥显示）。
+   按钮 absolute 定位不参与布局 → 计数永远在行尾，
+   所有行数字对齐，不会因按钮挤位而参差。 */
+.rail-slot {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 22px;
+}
+.rail-slot .rail-count { font-size: 11px; color: var(--text-mute); }
 .rail-item.active .rail-count { color: var(--accent); }
 
-.rail-sep { height: 1px; background: var(--border-soft); margin: 6px 4px; }
-
-.rail-head {
-  font-size: 11px;
-  color: var(--text-mute);
-  padding: 6px 9px 3px;
-  letter-spacing: .5px;
+.rail-actions {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
 }
+.rail-item:hover .rail-actions { opacity: 1; pointer-events: auto; }
+
+/* 悬停行尾时：计数淡出、按钮在原位淡入（原地替换，不跳动）。
+   仅对有操作按钮的行生效，无按钮的行悬停时计数保持可见。 */
+.rail-item:hover .rail-slot.has-actions .rail-count { opacity: 0; }
 
 .rail-mini {
   border: none;
@@ -566,13 +585,20 @@ body {
   padding: 0 3px;
   border-radius: 4px;
   cursor: pointer;
-  opacity: 0;
 }
 
-.rail-item:hover .rail-mini { opacity: 1; }
 .rail-mini:hover { color: var(--danger); }
 /* 「置顶」不是破坏性操作，别用红色 */
 .rail-mini.pin:hover { color: var(--accent); }
+
+.rail-sep { height: 1px; background: var(--border-soft); margin: 6px 4px; }
+
+.rail-head {
+  font-size: 11px;
+  color: var(--text-mute);
+  padding: 6px 9px 3px;
+  letter-spacing: .5px;
+}
 
 /* ---------------- 中间列表 ---------------- */
 
