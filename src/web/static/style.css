@@ -85,6 +85,15 @@
 
 * { box-sizing: border-box; }
 
+/* 光标全局收口：默认一律不显示文本编辑 I 光标（cursor 是继承属性）。
+   之前是浏览器 auto 行为——悬停到任何可选中文字都变 I-beam，看着像能输入。
+   真正的输入控件显式开回 text；可点击元素各自已有 cursor: pointer 覆盖。 */
+body { cursor: default; }
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select,
+[contenteditable="true"] { cursor: text; }
+
 html, body { height: 100%; margin: 0; }
 
 body {
