@@ -853,6 +853,109 @@ mark.hit {
   color: var(--text-mute);
 }
 
+/* ---------------- 日历 ---------------- */
+
+.cal-shell { max-width: 720px; }
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.cal-head-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--heading);
+  min-width: 130px;
+  text-align: center;
+}
+
+.cal-body { }
+
+.cal-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+}
+.cal-wday {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-mute);
+  padding: 4px 0;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.cal-cell {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  min-height: 64px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--panel);
+  transition: background .14s, box-shadow .14s;
+}
+.cal-cell:hover {
+  background: var(--panel-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.cal-num { font-size: 14px; font-weight: 600; color: var(--text); }
+.cal-name { font-size: 10px; color: var(--danger); line-height: 1; text-align: center; }
+.cal-adj {
+  font-size: 9px;
+  font-weight: 700;
+  background: var(--warn);
+  color: #fff;
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.4;
+}
+
+/* 业务四态：节假日红 / 调休橙 / 周末灰 / 普通默认 */
+.cal-cell.holiday .cal-num { color: var(--danger); }
+.cal-cell.workday .cal-num { color: var(--warn); }
+.cal-cell.weekend .cal-num { color: var(--text-mute); }
+.cal-cell.holiday { background: var(--accent-bg); }
+
+/* 今天：品牌色描边 */
+.cal-cell.today {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.cal-cell.empty { background: transparent; border-color: transparent; box-shadow: none; }
+
+.cal-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 14px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.cal-legend .lg { display: inline-flex; align-items: center; gap: 5px; }
+.lg-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.lg-dot.holiday { background: var(--danger); }
+.lg-dot.adj { background: var(--warn); }
+.lg-dot.weekend { background: var(--text-mute); }
+.lg-dot.today { box-shadow: inset 0 0 0 2px var(--accent); }
+
 @media (max-width: 1180px) {
   .todo-shell { grid-template-columns: 180px minmax(0, 1fr); }
   .todo-shell .detail {
@@ -874,4 +977,6 @@ mark.hit {
   .rail-item { width: auto; }
   .rail-sep { display: none; }
   .rail-head { display: none; }
+  .cal-shell { max-width: 100%; }
+  .cal-cell { min-height: 44px; padding: 3px; }
 }

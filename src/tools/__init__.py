@@ -20,9 +20,11 @@ def register_all():
     if _registered:
         return registry.all_tools()
 
+    from tools.calendar.tool import CalendarTool
     from tools.todo.tool import TodoTool
 
     registry.register(TodoTool())
+    registry.register(CalendarTool())
 
     _registered = True
     return registry.all_tools()
