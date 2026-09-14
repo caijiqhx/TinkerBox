@@ -19,7 +19,8 @@
 
   var headBox = null, overviewBox = null, gridBox = null;
   var pickerBox = null, titleBtn = null;   /* 年月快速选择面板 + 触发它的标题按钮 */
-  var state = { year: 0, month: 0, pickerOpen: false, editingYear: false };
+  var state = { year: 0, month: 0, pickerOpen: false, editingYear: false,
+                pickerYear: 0 };   /* 面板里正在浏览的年份（与日历当前显示的年份分开，互不影响） */
   var dueMap = {};                     /* date -> {pending, done}，来自 todo.due_map */
 
   /* 小 SVG（行为与 todo.js 一致：不用文本字符，避免 UOS 字体缺字形） */
@@ -98,6 +99,8 @@
       pickerBox.className = "cal-picker hidden";
       return;
     }
+    /* 每次打开都从"日历当前显示的年份"起算；面板里的年份只是待选值，不影响日历 */
+    state.pickerYear = state.year || new Date().getFullYear();
     renderPicker();
     pickerBox.className = "cal-picker";
     /* 贴在头部下方（头部高度随字号/缩放变化，所以现算） */
@@ -109,15 +112,16 @@
     if (!pickerBox) { return; }
     ctx.clear(pickerBox);
 
-    var year = state.year || new Date().getFullYear();
+    var year = state.pickerYear || state.year || new Date().getFullYear();
 
     var yearRow = el("div", { class: "cal-pick-yearrow" });
+    /* 箭头只是"翻面板里的年份"—— 不跳转、不收面板，方便先翻到目标年再点月份 */
     yearRow.appendChild(el("button", {
       class: "btn ghost icon",
       html: chevron("left"),
       title: "上一年",
       onmousedown: noFocus,
-      onclick: function () { goMonth(year - 1, state.month); setPickerOpen(false); }
+      onclick: function () { state.pickerYear = year - 1; renderPicker(); }
     }));
 
     if (state.editingYear) {
@@ -138,8 +142,9 @@
             renderPicker();
             return;
           }
-          goMonth(Number(value), state.month);
-          setPickerOpen(false);
+          /* 与箭头一致：只把面板翻到那一年，不跳转也不收面板，接着点月份即可 */
+          state.pickerYear = Number(value);
+          renderPicker();
         }
       });
       input.value = String(year);
@@ -161,7 +166,7 @@
       html: chevron("right"),
       title: "下一年",
       onmousedown: noFocus,
-      onclick: function () { goMonth(year + 1, state.month); setPickerOpen(false); }
+      onclick: function () { state.pickerYear = year + 1; renderPicker(); }
     }));
     pickerBox.appendChild(yearRow);
 
@@ -169,12 +174,14 @@
     for (var m = 1; m <= 12; m++) {
       (function (mm) {
         months.appendChild(el("button", {
-          class: "cal-pick-month" + (mm === state.month ? " active" : ""),
+          /* 高亮只标"日历正显示的那个月"；翻到别的年份时 12 个月都不高亮 */
+          class: "cal-pick-month" +
+            ((year === state.year && mm === state.month) ? " active" : ""),
           text: mm + " 月",
           onmousedown: noFocus,
           onclick: function () {
             setPickerOpen(false);
-            if (mm !== state.month) { goMonth(year, mm); }
+            if (!(year === state.year && mm === state.month)) { goMonth(year, mm); }
           }
         }));
       })(m);
