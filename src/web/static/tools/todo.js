@@ -21,6 +21,7 @@
   var state = {
     view: "my_day",
     listId: "default",
+    due: "",               /* 「某天待办」的目标日期（ISO）；其余视图恒为空 */
     keyword: "",
     board: null,
     selected: null,
@@ -55,7 +56,10 @@
     important: { icon: "★", label: "重要" },
     planned:   { icon: "◷", label: "已计划" },
     completed: { icon: "✓", label: "已完成", iconHtml: iconSvg("check") },
-    trash:     { icon: "♻", label: "回收站" }
+    trash:     { icon: "♻", label: "回收站" },
+    /* 瞬态视图：由日历格子跳转进入（#/todo?due=YYYY-MM-DD），
+       刻意不放进左栏的 order 数组 —— 它不是常驻入口。 */
+    day:       { icon: "▤", label: "某天待办" }
   };
 
   var WEEKDAY = "日一二三四五六";
@@ -174,7 +178,8 @@
     return ctx.callTool("todo", "board", {
       view: state.view,
       list_id: state.listId,
-      keyword: state.keyword
+      keyword: state.keyword,
+      due: state.due
     }).then(function (data) {
       state.board = data;
       syncSelection(data);
@@ -379,6 +384,7 @@
   function goView(view) {
     state.view = view;
     if (view !== "list") { state.listId = "default"; }
+    if (view !== "day") { state.due = ""; }   /* 离开「某天待办」就清掉日期筛选 */
     if (view === "trash") {
       state.selected = null;             // 回收站里不做选中，也就没有详情
       state.picking = false;             // 回收站的任务不能批量改，直接退出多选
@@ -392,6 +398,7 @@
   function goList(listId) {
     state.view = "list";
     state.listId = listId;
+    state.due = "";
     state.keyword = "";
     state.picked = [];
     if (searchInput) { searchInput.value = ""; }
@@ -524,6 +531,14 @@
       label = board.title || ("搜索：" + state.keyword);
     } else if (state.view === "list") {
       label = board.title || "任务";
+    } else if (state.view === "day") {
+      /* 某天待办：标题就是日期，补个星期几更好认 */
+      label = board.title || state.due;
+      var dp = String(label).split("-");
+      if (dp.length === 3) {
+        var dd = new Date(Number(dp[0]), Number(dp[1]) - 1, Number(dp[2]));
+        label += " 周" + WEEKDAY.charAt(dd.getDay());
+      }
     } else {
       label = VIEW_META[state.view] ? VIEW_META[state.view].label : "";
     }
@@ -579,6 +594,15 @@
             if (ok) { act("clear_done", {}); }
           });
         }
+      }));
+    } else if (state.view === "day") {
+      /* 某天待办：即使当天没有任务也要给「清除筛选」，否则退不出去 */
+      headBox.appendChild(el("div", { class: "list-sub", text: sub }));
+      headBox.appendChild(el("button", {
+        class: "btn small ghost",
+        text: "清除筛选",
+        title: "回到「我的一天」",
+        onclick: function () { goView("my_day"); }
       }));
     } else {
       headBox.appendChild(el("div", { class: "list-sub", text: sub }));
@@ -653,6 +677,17 @@
     return nodes;
   }
 
+  /* 跨清单视图（某天待办）里，每条任务要标出属于哪个清单 ——
+     否则一堆任务混在一起分不清归属。清单名从 board.lists 里查。 */
+  function listNameOf(task) {
+    var lists = (state.board && state.board.lists) || [];
+    var id = task.list_id || "default";
+    for (var i = 0; i < lists.length; i++) {
+      if (lists[i].id === id) { return lists[i].name || ""; }
+    }
+    return "";
+  }
+
   function taskRow(task) {
     var done = task.status === "done";
     var picking = state.picking;
@@ -685,6 +720,13 @@
     row.appendChild(check);
 
     var meta = el("div", { class: "task-meta" });
+    /* 某天待办是跨清单视图，先标出来源清单 */
+    if (state.view === "day") {
+      var srcName = listNameOf(task);
+      if (srcName) {
+        meta.appendChild(el("span", { class: "chip list-src", text: srcName, title: "所属清单：" + srcName }));
+      }
+    }
     if (task.important) {
       meta.appendChild(el("span", { class: "chip", text: "★" }));
     }
@@ -817,7 +859,9 @@
       var group = groups[i];
       if (group.label) {
         listBox.appendChild(el("div", {
-          class: "group-head" + (group.key === "overdue" ? " overdue" : ""),
+          class: "group-head"
+                 + (group.key === "overdue" ? " overdue" : "")
+                 + (group.key === "done" ? " done" : ""),
           text: group.label
         }));
       }
@@ -831,6 +875,7 @@
   function emptyHint() {
     if (state.keyword) { return "没有匹配「" + state.keyword + "」的任务"; }
     if (state.view === "trash") { return "回收站是空的\n删掉的任务会先放到这里，默认保留 30 天"; }
+    if (state.view === "day") { return "这一天没有到期的任务"; }
     if (state.view === "my_day") { return "今天还没有安排任务，用任务上的 ☀ 按钮加进来"; }
     if (state.view === "important") { return "还没有标星的任务"; }
     if (state.view === "planned") { return "还没有设置到期日的任务"; }
@@ -1384,6 +1429,7 @@
 
     state.view = "my_day";
     state.listId = "default";
+    state.due = "";
     state.keyword = "";
     state.selected = null;
     state.stepDraft = "";
@@ -1391,6 +1437,15 @@
     state.dragListId = null;
     state.picking = false;
     state.picked = [];
+
+    /* 从日历格子跳过来：hash 形如 #/todo?due=2026-02-17。
+       外壳的 currentKey() 会把 ? 后面丢掉（只用于路由匹配），
+       所以日期参数在这里自己读。 */
+    var hashMatch = /[?&]due=(\d{4}-\d{2}-\d{2})/.exec(window.location.hash || "");
+    if (hashMatch) {
+      state.view = "day";
+      state.due = hashMatch[1];
+    }
 
     shell = el("div", { class: "todo-shell without-detail" });
     railBox = el("div", { class: "rail" });
@@ -1407,7 +1462,8 @@
       var title = String(addInput.value || "").trim();
       if (!title) { return; }
       addInput.value = "";
-      act("add", { title: title, view: state.view, list_id: state.listId });
+      /* day 视图下带上目标日期，新任务才会落在这一天（否则加完就消失） */
+      act("add", { title: title, view: state.view, list_id: state.listId, due: state.due });
     });
 
     searchInput = el("input", {

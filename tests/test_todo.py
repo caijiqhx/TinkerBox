@@ -528,6 +528,111 @@ class TodoToolTest(unittest.TestCase):
         self.assertEqual(len(landed), 1, landed)
         self.assertIn(landed[0], ("today", "week"), landed)
 
+    # ---------------------------------------------------------------- 某天待办（day）
+    def test_day_view_filters_by_due_across_lists_including_done(self):
+        work = self.tool.act_add_list({"name": "工作"})["list"]
+        target = "2026-02-17"
+
+        a = self.tool.act_add({"title": "默认清单当天"})["task"]
+        self.tool.act_update({"id": a["id"], "fields": {"due": target}})
+        b = self.tool.act_add({"title": "工作清单当天", "list_id": work["id"]})["task"]
+        self.tool.act_update({"id": b["id"], "fields": {"due": target}})
+        # 已完成的当天任务也要进 day 视图（这是它与其它视图的关键差异）
+        c = self.tool.act_add({"title": "当天已完成"})["task"]
+        self.tool.act_update({"id": c["id"], "fields": {"due": target}})
+        self.tool.act_toggle({"id": c["id"]})
+        # 别的日期 / 无到期日 —— 都不该出现
+        d = self.tool.act_add({"title": "别的日期"})["task"]
+        self.tool.act_update({"id": d["id"], "fields": {"due": "2026-02-18"}})
+        self.tool.act_add({"title": "没有到期日"})
+
+        board = self.tool.act_board({"view": "day", "due": target})
+        self.assertEqual(board["view"], "day")
+        self.assertEqual(board["title"], target)
+        self.assertEqual(board["due"], target)
+
+        groups = dict((g["key"], [t["title"] for t in g["tasks"]]) for g in board["groups"])
+        self.assertEqual(sorted(groups.get("pending", [])), ["工作清单当天", "默认清单当天"])
+        self.assertEqual(groups.get("done"), ["当天已完成"])
+        # 跨清单：两条 pending 分属不同清单
+        ids = [t["id"] for g in board["groups"] for t in g["tasks"]]
+        self.assertEqual(len(ids), 3, ids)
+
+    def test_day_view_empty_and_pending_only(self):
+        only_pending = self.tool.act_add({"title": "只有未完成"})["task"]
+        self.tool.act_update({"id": only_pending["id"], "fields": {"due": "2026-03-01"}})
+
+        board = self.tool.act_board({"view": "day", "due": "2026-03-01"})
+        self.assertEqual([g["key"] for g in board["groups"]], ["pending"])
+        self.assertEqual(board["shown"], 1)
+
+        # 没有任何任务的一天：groups 为空，title 仍是日期
+        empty = self.tool.act_board({"view": "day", "due": "2026-03-02"})
+        self.assertEqual(empty["groups"], [])
+        self.assertEqual(empty["shown"], 0)
+        self.assertEqual(empty["title"], "2026-03-02")
+
+    def test_day_view_bad_due_falls_back_to_my_day(self):
+        # 非法日期不应产生空视图，退回默认视图
+        board = self.tool.act_board({"view": "day", "due": "not-a-date"})
+        self.assertEqual(board["view"], "my_day")
+        self.assertEqual(board["due"], "")
+
+        board = self.tool.act_board({"view": "day"})
+        self.assertEqual(board["view"], "my_day")
+
+    def test_day_view_completes_and_does_not_touch_other_views(self):
+        target = "2026-04-10"
+        task = self.tool.act_add({"title": "当天任务"})["task"]
+        self.tool.act_update({"id": task["id"], "fields": {"due": target}})
+
+        before = self.tool.act_board({"view": "planned"})["shown"]
+        self.tool.act_toggle({"id": task["id"]})          # 完成
+        day = self.tool.act_board({"view": "day", "due": target})
+        self.assertEqual([g["key"] for g in day["groups"]], ["done"])
+        # 完成后从「已计划」（只看未完成）里消失，但 day 视图仍显示
+        self.assertEqual(self.tool.act_board({"view": "planned"})["shown"], before - 1)
+
+    def test_day_view_add_stamps_that_due(self):
+        # 在某天待办里添加任务，自动带上那天的到期日，否则加完立刻从视图消失
+        task = self.tool.act_add({"title": "当天新建", "view": "day",
+                                  "due": "2026-06-18"})["task"]
+        self.assertEqual(task["due"], "2026-06-18")
+        board = self.tool.act_board({"view": "day", "due": "2026-06-18"})
+        self.assertEqual(board["shown"], 1)
+
+    # ---------------------------------------------------------------- due_map
+    def test_due_map_counts_pending_and_done_per_day(self):
+        target = "2026-05-01"
+        a = self.tool.act_add({"title": "甲"})["task"]
+        self.tool.act_update({"id": a["id"], "fields": {"due": target}})
+        b = self.tool.act_add({"title": "乙"})["task"]
+        self.tool.act_update({"id": b["id"], "fields": {"due": target}})
+        self.tool.act_toggle({"id": b["id"]})
+        c = self.tool.act_add({"title": "丙"})["task"]
+        self.tool.act_update({"id": c["id"], "fields": {"due": "2026-05-20"}})
+        self.tool.act_add({"title": "无到期日"})
+
+        days = self.tool.act_due_map({})["days"]
+        self.assertEqual(days[target], {"pending": 1, "done": 1})
+        self.assertEqual(days["2026-05-20"], {"pending": 1, "done": 0})
+        self.assertNotIn("", days)
+
+    def test_due_map_filters_by_year_month(self):
+        a = self.tool.act_add({"title": "五月"})["task"]
+        self.tool.act_update({"id": a["id"], "fields": {"due": "2026-05-01"}})
+        b = self.tool.act_add({"title": "六月"})["task"]
+        self.tool.act_update({"id": b["id"], "fields": {"due": "2026-06-01"}})
+
+        may = self.tool.act_due_map({"year": 2026, "month": 5})["days"]
+        self.assertIn("2026-05-01", may)
+        self.assertNotIn("2026-06-01", may)
+
+        # 非法 year/month 退化成「不限月份」，不报错
+        all_days = self.tool.act_due_map({"year": "x", "month": 5})["days"]
+        self.assertIn("2026-05-01", all_days)
+        self.assertIn("2026-06-01", all_days)
+
     # ---------------------------------------------------------------- 全部任务
     def test_all_view_spans_lists_and_excludes_completed(self):
         work = self.tool.act_add_list({"name": "工作"})["list"]

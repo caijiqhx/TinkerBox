@@ -125,7 +125,7 @@ class TodoTool(Tool):
             })
         return result
 
-    def _select(self, tasks, view, list_id, keyword):
+    def _select(self, tasks, view, list_id, keyword, due=None):
         # 搜索是**全局**的（微软待办也是这个行为）：
         # 否则用户在「我的一天」里搜别处的任务会搜不到，很反直觉。
         if keyword:
@@ -133,7 +133,10 @@ class TodoTool(Tool):
             chosen.sort(key=self._search_key)
             return chosen
 
-        if view == model.VIEW_COMPLETED:
+        if view == model.VIEW_DAY:
+            # 某天待办：按到期日筛选，**跨清单且含已完成**（前端分两组展示）
+            chosen = [t for t in tasks if t.get("due") == due]
+        elif view == model.VIEW_COMPLETED:
             chosen = [t for t in tasks if t.get("status") == model.STATUS_DONE]
         elif view == model.VIEW_ALL:
             # 所有未完成任务，跨清单 —— 任务分散在多个清单时不用挨个点
@@ -180,6 +183,17 @@ class TodoTool(Tool):
 
     def _group(self, tasks, view, searching):
         """统一返回 groups 结构，前端可以无差别渲染。"""
+        if view == model.VIEW_DAY and not searching:
+            # 某天待办：按完成状态分两组（未完成在前，已完成在后）
+            pending = [t for t in tasks if t.get("status") != model.STATUS_DONE]
+            done = [t for t in tasks if t.get("status") == model.STATUS_DONE]
+            done.sort(key=lambda t: t.get("done_at") or "", reverse=True)
+            groups = []
+            if pending:
+                groups.append({"key": "pending", "label": "未完成", "tasks": pending})
+            if done:
+                groups.append({"key": "done", "label": "已完成", "tasks": done})
+            return groups
         if view == model.VIEW_PLANNED and not searching:
             return self._planned_groups(tasks)
         if not tasks:
@@ -266,6 +280,10 @@ class TodoTool(Tool):
             list_id = model.DEFAULT_LIST_ID
 
         keyword = str(payload.get("keyword") or "").strip().lower()
+        # 某天待办视图的目标日期（ISO）；非法/缺失时退回默认视图，避免出现空视图
+        due = str(payload.get("due") or "").strip()
+        if view == model.VIEW_DAY and model.parse_date(due) is None:
+            view = model.VIEW_MY_DAY
         title = ""
 
         if view == model.VIEW_TRASH:
@@ -273,17 +291,20 @@ class TodoTool(Tool):
             selected = sorted(trash, key=lambda t: t.get("deleted_at") or "", reverse=True)
             groups = [{"key": "all", "label": "", "tasks": selected}] if selected else []
         else:
-            selected = self._select(tasks, view, list_id, keyword)
+            selected = self._select(tasks, view, list_id, keyword, due)
             groups = self._group(selected, view, bool(keyword))
             if view == model.VIEW_LIST:
                 item = self._find_list(lists, list_id)
                 title = item["name"] if item else model.DEFAULT_LIST_NAME
+            if view == model.VIEW_DAY:
+                title = due
             if keyword:
                 title = "搜索：%s" % (keyword,)
 
         return {
             "view": view,
             "list_id": list_id,
+            "due": due if view == model.VIEW_DAY else "",
             "title": title,
             "today": model.today_text(),
             "presets": model.due_presets(),        # 到期日快捷项（口径在 model 里统一）
@@ -294,6 +315,37 @@ class TodoTool(Tool):
             "stats": self._stats(tasks),
             "store": store.path_text(),
         }
+
+    def act_due_map(self, payload):
+        """按到期日聚合任务数，供日历格子叠加显示。
+
+        返回 {"days": {"YYYY-MM-DD": {"pending": n, "done": m}}}。
+        可选 year/month 限定月份（日历按当前显示的月请求，避免整表返回）；
+        不传则返回全部有到期日的日子。口径与 day 视图一致：按 due 归属，
+        已完成任务也计入（前端分「未完成/已完成」展示）。
+        """
+        data = store.load()
+        tasks = data["tasks"]
+
+        prefix = ""
+        year, month = payload.get("year"), payload.get("month")
+        if year is not None and month is not None:
+            try:
+                prefix = "%04d-%02d-" % (int(year), int(month))
+            except (TypeError, ValueError):
+                prefix = ""
+
+        days = {}
+        for task in tasks:
+            due = task.get("due")
+            if not due or (prefix and not str(due).startswith(prefix)):
+                continue
+            bucket = days.setdefault(str(due), {"pending": 0, "done": 0})
+            if task.get("status") == model.STATUS_DONE:
+                bucket["done"] += 1
+            else:
+                bucket["pending"] += 1
+        return {"days": days}
 
     # ==================================================================
     # 任务增删改
@@ -319,6 +371,10 @@ class TodoTool(Tool):
         elif view == model.VIEW_IMPORTANT:
             extra["important"] = True
         elif view == model.VIEW_PLANNED:
+            extra["due"] = model.normalize_date(payload.get("due")) or model.today_text()
+        elif view == model.VIEW_DAY:
+            # 某天待办里添加 = 建一条到期日就是那天的任务；
+            # 否则新任务没有 due，加完立刻从这个视图消失（看着像没加上）
             extra["due"] = model.normalize_date(payload.get("due")) or model.today_text()
 
         task = model.make_task(payload.get("title"), list_id, **extra)
@@ -720,6 +776,7 @@ class TodoTool(Tool):
     def actions(self):
         return {
             "board": self.act_board,
+            "due_map": self.act_due_map,
             "add": self.act_add,
             "update": self.act_update,
             "toggle": self.act_toggle,

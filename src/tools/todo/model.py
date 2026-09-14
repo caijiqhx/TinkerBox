@@ -63,8 +63,11 @@ VIEW_PLANNED = "planned"
 VIEW_COMPLETED = "completed"
 VIEW_LIST = "list"
 VIEW_TRASH = "trash"
+#: 「某天待办」——瞬态视图（不进左栏），由日历格子跳转进入，
+#: 按 due == 指定日期筛选，跨清单且**含已完成**（前端分「未完成/已完成」两组）。
+VIEW_DAY = "day"
 VIEWS = (VIEW_ALL, VIEW_MY_DAY, VIEW_IMPORTANT, VIEW_PLANNED,
-         VIEW_COMPLETED, VIEW_LIST, VIEW_TRASH)
+         VIEW_COMPLETED, VIEW_LIST, VIEW_TRASH, VIEW_DAY)
 
 
 # ---------------------------------------------------------------- 时间

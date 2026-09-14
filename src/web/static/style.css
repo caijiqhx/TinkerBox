@@ -694,6 +694,9 @@ body {
 }
 
 .group-head.overdue { color: var(--danger); }
+/* 某天待办：未完成组用常规文字色（要抓眼），已完成组弱化 */
+.group-head.pending { color: var(--text); }
+.group-head.done { color: var(--text-mute); }
 
 .task {
   display: flex;
@@ -740,6 +743,8 @@ body {
 .chip.overdue { color: var(--danger); border-color: var(--danger); }
 .chip.soon { color: var(--accent); border-color: var(--accent); }
 .chip.progress { color: var(--accent); border-color: var(--accent); }
+/* 某天待办里标出任务的来源清单（跨清单视图才需要，避免归属不明） */
+.chip.list-src { color: var(--text-mute); background: var(--panel-2); border-color: var(--border-soft); }
 
 /* 搜索命中的片段 */
 mark.hit {
@@ -1043,6 +1048,40 @@ mark.hit {
 
 .cal-cell.empty { background: transparent; border-color: transparent; box-shadow: none; }
 
+/* 格子可点（跳「某天待办」）—— 占位空格不可点 */
+.cal-cell { cursor: pointer; }
+.cal-cell.empty { cursor: default; }
+
+/* 当天待办计数：未完成醒目（实心点，强调色）、已完成弱化（空心点，灰） */
+.cal-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+.cal-due .due-pending,
+.cal-due .due-done { display: inline-flex; align-items: center; }
+.cal-due .due-pending { color: var(--accent); }
+.cal-due .due-done { color: var(--text-mute); font-weight: 500; }
+.cal-due .due-pending::before,
+.cal-due .due-done::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 3px;
+}
+.cal-due .due-pending::before { background: var(--accent); }
+.cal-due .due-done::before { border: 1.5px solid var(--text-mute); }
+
+/* 整块着色的假日/调休格子里，计数沿用同色系以保证可读 */
+.cal-cell.holiday .due-pending { color: var(--danger); }
+.cal-cell.holiday .due-pending::before { background: var(--danger); }
+.cal-cell.workday .due-pending { color: var(--warn); }
+.cal-cell.workday .due-pending::before { background: var(--warn); }
+
 .cal-legend {
   display: flex;
   gap: 16px;
@@ -1061,6 +1100,12 @@ mark.hit {
 .lg-dot.adj { background: var(--warn); }
 .lg-dot.weekend { background: var(--text-mute); }
 .lg-dot.today { box-shadow: inset 0 0 0 2px var(--accent); }
+.lg-dot.due {
+  background: var(--accent);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
 
 @media (max-width: 1180px) {
   .todo-shell { grid-template-columns: 180px minmax(0, 1fr); }

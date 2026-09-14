@@ -19,6 +19,7 @@
 
   var headBox = null, overviewBox = null, gridBox = null;
   var state = { year: 0, month: 0 };   /* 0 = 尚未加载 */
+  var dueMap = {};                     /* date -> {pending, done}，来自 todo.due_map */
 
   /* 小 SVG（行为与 todo.js 一致：不用文本字符，避免 UOS 字体缺字形） */
   function chevron(dir) {
@@ -127,6 +128,18 @@
         var cls = "cal-cell " + item.status;
         if (item.date === today) { cls += " today"; }
 
+        var counts = dueMap[item.date] || { pending: 0, done: 0 };
+        var hasTask = counts.pending > 0 || counts.done > 0;
+        if (hasTask) { cls += " has-task"; }
+
+        /* 悬停提示：节日/农历打底，有待办再补一行明细 */
+        var tip = item.name || item.lunar || "";
+        if (hasTask) {
+          var line = "待办 " + counts.pending + " 项未完成";
+          if (counts.done) { line += "、" + counts.done + " 项已完成"; }
+          tip = (tip ? tip + " · " : "") + line;
+        }
+
         var kids = [];
         kids.push(el("span", { class: "cal-num", text: String(item.day) }));
 
@@ -141,7 +154,25 @@
         if (item.lunar) {
           kids.push(el("span", { class: "cal-lunar", text: item.lunar }));
         }
-        grid.appendChild(el("div", { class: cls, title: item.name || item.lunar || "", }, kids));
+
+        /* 当天待办：未完成醒目（实心点 + 数字）、已完成弱化（空心点），
+           口径与「某天待办」视图一致。（已完成也按到期日归属） */
+        if (hasTask) {
+          var dueRow = el("span", { class: "cal-due" });
+          if (counts.pending) {
+            dueRow.appendChild(el("span", { class: "due-pending", text: String(counts.pending) }));
+          }
+          if (counts.done) {
+            dueRow.appendChild(el("span", { class: "due-done", text: String(counts.done) }));
+          }
+          kids.push(dueRow);
+        }
+
+        grid.appendChild(el("div", {
+          class: cls,
+          title: tip,
+          onclick: function () { gotoDay(item.date); }
+        }, kids));
       })(view.items[n]);
     }
     gridBox.appendChild(grid);
@@ -151,15 +182,23 @@
       el("span", { class: "lg" }, [el("i", { class: "lg-dot holiday" }), el("span", { text: "节假日" })]),
       el("span", { class: "lg" }, [el("i", { class: "lg-dot adj" }), el("span", { text: "调休补班" })]),
       el("span", { class: "lg" }, [el("i", { class: "lg-dot weekend" }), el("span", { text: "周末" })]),
-      el("span", { class: "lg" }, [el("i", { class: "lg-dot today" }), el("span", { text: "今天" })])
+      el("span", { class: "lg" }, [el("i", { class: "lg-dot today" }), el("span", { text: "今天" })]),
+      el("span", { class: "lg" }, [el("i", { class: "lg-dot due" }), el("span", { text: "有待办（点击查看）" })])
     ]);
     gridBox.appendChild(legend);
   }
 
   function loadMonth(year, month) {
-    ctx.callTool("calendar", "month", { year: year, month: month }).then(function (data) {
-      var view = data && data.view;
+    /* 日历数据与"当天待办数"并行取。
+       待办那边取失败（例如工具被停用）就退化成纯日历，不影响主功能。 */
+    var calendarReq = ctx.callTool("calendar", "month", { year: year, month: month });
+    var todoReq = ctx.callTool("todo", "due_map", { year: year, month: month })
+      .catch(function () { return null; });
+
+    Promise.all([calendarReq, todoReq]).then(function (results) {
+      var view = results[0] && results[0].view;
       if (!view) { return; }
+      dueMap = (results[1] && results[1].days) || {};
       state.year = view.year;
       state.month = view.month;
       renderHead(view);
@@ -174,6 +213,12 @@
     if (month < 1) { year -= 1; month = 12; }
     else if (month > 12) { year += 1; month = 1; }
     loadMonth(year, month);
+  }
+
+  /* 点某一天 → 跳到待办的「某天待办」视图（跨清单，按完成状态分组）。
+     日期通过 hash 的 query 传递，由 todo 前端自己解析。 */
+  function gotoDay(date) {
+    window.location.hash = "#/todo?due=" + date;
   }
 
   function render(container, context) {
