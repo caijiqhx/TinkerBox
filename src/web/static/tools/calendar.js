@@ -18,7 +18,8 @@
   var el = null;
 
   var headBox = null, overviewBox = null, gridBox = null;
-  var state = { year: 0, month: 0 };   /* 0 = 尚未加载 */
+  var pickerBox = null, titleBtn = null;   /* 年月快速选择面板 + 触发它的标题按钮 */
+  var state = { year: 0, month: 0, pickerOpen: false, editingYear: false };
   var dueMap = {};                     /* date -> {pending, done}，来自 todo.due_map */
 
   /* 小 SVG（行为与 todo.js 一致：不用文本字符，避免 UOS 字体缺字形） */
@@ -51,9 +52,13 @@
       onclick: function () { goMonth(state.year, state.month + 1); }
     });
     var nums = view.year_month.split("-");
-    var title = el("div", {
+    titleBtn = el("button", {
       class: "cal-title",
-      text: nums[0] + " 年 " + parseInt(nums[1], 10) + " 月"
+      text: nums[0] + " 年 " + parseInt(nums[1], 10) + " 月",
+      title: "点击选择年月",
+      /* 别让按钮抢走焦点：否则被替换掉的节点带着焦点，浏览器回退焦点时会顺手滚动页面 */
+      onmousedown: noFocus,
+      onclick: function () { setPickerOpen(!state.pickerOpen); }
     });
 
     var todayBtn = el("button", {
@@ -67,9 +72,119 @@
     });
 
     var group = el("div", { class: "cal-head-group" }, [
-      prev, next, title, todayBtn
+      prev, next, titleBtn, todayBtn
     ]);
     headBox.appendChild(group);
+  }
+
+  function noFocus(event) { event.preventDefault(); }
+
+  /* ================= 年月快速选择面板 =================
+     点标题弹出：年份行 + 12 个月格 + 回到今天。
+     - 近处用"点"（月份格）；远处用"打"（点年份变输入框，跳十年八年比一格一格翻快得多） */
+  function setPickerOpen(on) {
+    state.pickerOpen = !!on;
+    if (!on) { state.editingYear = false; }
+    if (!pickerBox) { return; }
+    if (!on) {
+      pickerBox.className = "cal-picker hidden";
+      return;
+    }
+    renderPicker();
+    pickerBox.className = "cal-picker";
+    /* 贴在头部下方（头部高度随字号/缩放变化，所以现算） */
+    var headH = (headBox && headBox.offsetHeight) || 40;
+    pickerBox.style.top = (headH + 6) + "px";
+  }
+
+  function renderPicker() {
+    if (!pickerBox) { return; }
+    ctx.clear(pickerBox);
+
+    var year = state.year || new Date().getFullYear();
+
+    var yearRow = el("div", { class: "cal-pick-yearrow" });
+    yearRow.appendChild(el("button", {
+      class: "btn ghost icon",
+      html: chevron("left"),
+      title: "上一年",
+      onmousedown: noFocus,
+      onclick: function () { goMonth(year - 1, state.month); setPickerOpen(false); }
+    }));
+
+    if (state.editingYear) {
+      /* 行内输入年份：回车提交、Esc 放弃、失焦也提交（与"点标题改名"同一套） */
+      var input = el("input", {
+        class: "cal-pick-yearinput",
+        type: "text",
+        onkeydown: function (event) {
+          if (event.key === "Enter") { input.blur(); }
+          else if (event.key === "Escape") { state.editingYear = false; renderPicker(); }
+        },
+        onblur: function () {
+          var value = String(input.value || "").trim();
+          state.editingYear = false;
+          if (value === String(year)) { renderPicker(); return; }
+          if (!/^\d{4}$/.test(value) || Number(value) < 1900 || Number(value) > 2400) {
+            ctx.toast("年份请填 1900–2400 的四位数字", true);
+            renderPicker();
+            return;
+          }
+          goMonth(Number(value), state.month);
+          setPickerOpen(false);
+        }
+      });
+      input.value = String(year);
+      yearRow.appendChild(input);
+      /* 渲染完再聚焦（此刻还没进 DOM） */
+      window.setTimeout(function () { if (input.focus) { input.focus(); input.select(); } }, 0);
+    } else {
+      yearRow.appendChild(el("button", {
+        class: "cal-pick-yearbtn",
+        text: String(year),
+        title: "点击可直接输入年份",
+        onmousedown: noFocus,
+        onclick: function () { state.editingYear = true; renderPicker(); }
+      }));
+    }
+
+    yearRow.appendChild(el("button", {
+      class: "btn ghost icon",
+      html: chevron("right"),
+      title: "下一年",
+      onmousedown: noFocus,
+      onclick: function () { goMonth(year + 1, state.month); setPickerOpen(false); }
+    }));
+    pickerBox.appendChild(yearRow);
+
+    var months = el("div", { class: "cal-pick-months" });
+    for (var m = 1; m <= 12; m++) {
+      (function (mm) {
+        months.appendChild(el("button", {
+          class: "cal-pick-month" + (mm === state.month ? " active" : ""),
+          text: mm + " 月",
+          onmousedown: noFocus,
+          onclick: function () {
+            setPickerOpen(false);
+            if (mm !== state.month) { goMonth(year, mm); }
+          }
+        }));
+      })(m);
+    }
+    pickerBox.appendChild(months);
+
+    pickerBox.appendChild(el("div", { class: "cal-pick-foot" }, [
+      el("button", {
+        class: "btn ghost small",
+        text: "回到今天",
+        onmousedown: noFocus,
+        onclick: function () {
+          var now = new Date();
+          goMonth(now.getFullYear(), now.getMonth() + 1);
+          setPickerOpen(false);
+        }
+      })
+    ]));
   }
 
   /* 月份概览：如「节假日 9 天 · 春节(9天)」「调休 2 天 · 2/14、2/28」 */
@@ -251,12 +366,16 @@
 
     state.year = 0;
     state.month = 0;
+    state.pickerOpen = false;
+    state.editingYear = false;
 
     var shell = el("div", { class: "cal-shell" });
     headBox = el("div", { class: "cal-head" });
+    pickerBox = el("div", { class: "cal-picker hidden" });
     overviewBox = el("div", { class: "cal-overview-wrap" });
     gridBox = el("div", { class: "cal-body" });
     shell.appendChild(headBox);
+    shell.appendChild(pickerBox);
     shell.appendChild(overviewBox);
     shell.appendChild(gridBox);
     container.appendChild(shell);
@@ -264,6 +383,26 @@
     var now = new Date();
     loadMonth(now.getFullYear(), now.getMonth() + 1);
   }
+
+  /* ================= 面板的关闭途径 =================
+     注册在模块层（脚本加载时一次）—— 写进 render() 里会随每次进入工具不断累积。 */
+
+  /* 点面板外面（或再点一次标题）就收起 */
+  document.addEventListener("click", function (event) {
+    if (!state.pickerOpen) { return; }
+    var target = event.target;
+    if (pickerBox && pickerBox.contains && pickerBox.contains(target)) { return; }
+    if (titleBtn && titleBtn.contains && titleBtn.contains(target)) { return; }
+    setPickerOpen(false);
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape" || !state.pickerOpen) { return; }
+    /* 焦点在年份输入框里时，Esc 是"放弃这次修改"，交给输入框自己处理（面板不关） */
+    var tag = (event.target && event.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA") { return; }
+    setPickerOpen(false);
+  });
 
   window.ToolBox.registerTool("calendar", { render: render });
 })(window, document);

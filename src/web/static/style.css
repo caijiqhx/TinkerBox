@@ -920,7 +920,7 @@ mark.hit {
 
 /* ---------------- 日历 ---------------- */
 
-.cal-shell { max-width: 720px; }
+.cal-shell { max-width: 720px; position: relative; }   /* 年月面板以它为定位上下文 */
 
 .cal-head {
   display: flex;
@@ -933,12 +933,106 @@ mark.hit {
   align-items: center;
   gap: 8px;
 }
+/* 标题即按钮：点它弹出年月快速选择（外观保持"标题"的样子，hover 才露出可点） */
 .cal-title {
   font-size: 18px;
   font-weight: 600;
   color: var(--heading);
   min-width: 130px;
   text-align: center;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .14s, border-color .14s, color .14s;
+}
+.cal-title:hover { background: var(--panel-2); border-color: var(--border); color: var(--accent); }
+
+/* ---------------- 年月快速选择面板 ---------------- */
+
+.cal-picker {
+  position: absolute;
+  left: 0;
+  top: 48px;                 /* 打开时会按头部实际高度重设 */
+  z-index: 20;
+  width: 272px;
+  padding: 10px 12px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.cal-picker.hidden { display: none; }
+
+.cal-pick-yearrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+/* 年份：平时是按钮（点击进入输入），输入时换成输入框 —— 跳得远时比一格一格翻快得多 */
+.cal-pick-yearbtn {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--heading);
+  cursor: pointer;
+  transition: background .14s, border-color .14s, color .14s;
+}
+.cal-pick-yearbtn:hover { background: var(--panel-2); border-color: var(--border); color: var(--accent); }
+.cal-pick-yearinput {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+.cal-pick-yearinput:focus { outline: none; }
+
+.cal-pick-months {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.cal-pick-month {
+  padding: 7px 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background .14s, border-color .14s, color .14s;
+}
+.cal-pick-month:hover { border-color: var(--accent); color: var(--accent); }
+.cal-pick-month.active {
+  background: var(--accent-bg);
+  border-color: var(--accent-line);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.cal-pick-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
 }
 
 .cal-body { }
