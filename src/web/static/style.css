@@ -1118,9 +1118,9 @@ mark.hit {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cal-name { font-size: 10.5px; color: var(--danger); line-height: 1; text-align: center; }
+.cal-name { font-size: 11.5px; color: var(--danger); line-height: 1; text-align: center; }
 .cal-adj {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   background: var(--adjust-bg);
   color: var(--warn);
