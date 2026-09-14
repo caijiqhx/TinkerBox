@@ -20,8 +20,10 @@
   var headBox = null, overviewBox = null, gridBox = null;
   var pickerBox = null, titleBtn = null;   /* 年月快速选择面板 + 触发它的标题按钮 */
   var state = { year: 0, month: 0, pickerOpen: false, editingYear: false,
-                pickerYear: 0 };   /* 面板里正在浏览的年份（与日历当前显示的年份分开，互不影响） */
+                pickerYear: 0,      /* 面板里正在浏览的年份（与日历当前显示的年份分开，互不影响） */
+                picked: "" };       /* 被点选中的那一天（再点一次取消） */
   var dueMap = {};                     /* date -> {pending, done}，来自 todo.due_map */
+  var cellNodes = {};                  /* date -> 格子节点：切换选中时只改这一个节点的 class，不整月重绘 */
 
   /* 小 SVG（行为与 todo.js 一致：不用文本字符，避免 UOS 字体缺字形） */
   function chevron(dir) {
@@ -263,10 +265,12 @@
     }
 
     var today = view.today;   /* 仅当月含今天时才非空 */
+    cellNodes = {};
     for (var n = 0; n < view.items.length; n++) {
       (function (item) {
         var cls = "cal-cell " + item.status;
         if (item.date === today) { cls += " today"; }
+        if (item.date === state.picked) { cls += " picked"; }
 
         var counts = dueMap[item.date] || { pending: 0, done: 0 };
         var hasTask = counts.pending > 0 || counts.done > 0;
@@ -336,10 +340,11 @@
           kids.push(dueRow);
         }
 
-        /* 格子本体**不响应点击** —— 格子又小又密、内容还多，整格可点很容易误触。
-           "看"和"加"都走格内的小按钮（鼠标进格子才浮现）：
+        /* 点格子本体 = 选中这一天（再点一次取消）—— 不跳转：
+           选中只是"边框加深 + 格内两个小按钮常驻"，真正的"看/加"仍由那两个按钮负责。
            有任务的那天才出现「清单」（跳这天的待办），任何一天都有「＋」（在这天新建）。 */
-        var attrs = { class: cls, title: tip };
+        var attrs = { class: cls, title: tip,
+                      onclick: function () { togglePick(item.date); } };
 
         if (hasTask) {
           kids.push(el("button", {
@@ -363,7 +368,9 @@
           }
         }));
 
-        grid.appendChild(el("div", attrs, kids));
+        var node = el("div", attrs, kids);
+        cellNodes[item.date] = node;
+        grid.appendChild(node);
       })(view.items[n]);
     }
     gridBox.appendChild(grid);
@@ -392,6 +399,7 @@
       dueMap = (results[1] && results[1].days) || {};
       state.year = view.year;
       state.month = view.month;
+      state.picked = "";               /* 换月后原来选中的那天已经不在视野里 */
       renderHead(view);
       renderOverview(view);
       renderGrid(view);
@@ -415,6 +423,22 @@
   /* 点格子里的「＋」→ 跳到那天并**直接聚焦添加框**（add=1），落地就能打字 */
   function gotoAdd(date) {
     window.location.hash = "#/todo?due=" + date + "&add=1";
+  }
+
+  /* 点格子本体 = 选中 / 取消选中这一天。
+     只改被选中那一个节点的 class（不整月重绘），避免闪烁和节点重建。
+     选中的作用：边框加深 + 格内两个小按钮常驻，方便"就盯着这天操作"。 */
+  function togglePick(date) {
+    var prev = cellNodes[state.picked];
+    if (prev) { prev.className = prev.className.replace(/\s*\bpicked\b/, ""); }
+
+    if (state.picked === date) {          /* 再点同一格 = 取消选中 */
+      state.picked = "";
+      return;
+    }
+    state.picked = date;
+    var node = cellNodes[date];
+    if (node) { node.className = node.className + " picked"; }
   }
 
   function render(container, context) {

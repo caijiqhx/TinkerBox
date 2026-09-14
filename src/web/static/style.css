@@ -1175,6 +1175,16 @@ mark.hit {
   box-shadow: var(--shadow-sm);
 }
 
+/* 选中的那一天（点格子本体切换）：边框加深 + 格内两个小按钮常驻，不用再悬停。
+   颜色用中性深色 —— 品牌绿要点给"今天"了，假期/调休格本身又有蓝/红边框，再挤一个颜色会乱。
+   必须连 :hover 一起写：上面那两条状态 hover 规则会重设 border-color，特异性也刚好相同。 */
+.cal-cell.picked,
+.cal-cell.picked:hover {
+  border-color: var(--text-dim);
+}
+.cal-cell.picked .cal-open,
+.cal-cell.picked .cal-add { opacity: 1; }
+
 /* 今天：右上角一个品牌色小圆点。
    早先是给格子套一圈 outline（画在边框外），但假期格子本身已有蓝底 + 蓝框，
    今天再套一圈绿框就成了"蓝框套绿框"，两个颜色打架 —— 圆点与格子状态完全解耦，
@@ -1192,9 +1202,9 @@ mark.hit {
 
 .cal-cell.empty { background: transparent; border-color: transparent; box-shadow: none; }
 
-/* 格子本体一律不可点 —— 格子又小又密、内容还多，整格可点太容易误触；
-   "看"与"加"都走格内的小按钮（见 .cal-open / .cal-add） */
-.cal-cell { cursor: default; }
+/* 格子本体可点 = 选中这一天（再点一次取消），不会跳转；跳转仍由格内按钮负责。
+   user-select: none 防止点击时把格内文字拖出一片蓝色高亮。占位空格不可点。 */
+.cal-cell { cursor: pointer; user-select: none; }
 .cal-cell.empty { cursor: default; }
 
 /* 格内小按钮：「清单」在左下、「＋」在右下。平时完全不可见，鼠标进格子才浮现 ——
