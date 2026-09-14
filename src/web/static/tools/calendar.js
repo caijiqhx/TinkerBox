@@ -36,6 +36,11 @@
     'stroke="currentColor" stroke-width="2.6" stroke-linecap="round">' +
     '<path d="M8 3.5v9"/><path d="M3.5 8h9"/></svg>';
 
+  /* 格内「清单」：查看这一天已有的待办（与「＋」成对，一左一右） */
+  var LIST_SVG = '<svg viewBox="0 0 16 16" class="ic" width="11" height="11" fill="none" ' +
+    'stroke="currentColor" stroke-width="2.2" stroke-linecap="round">' +
+    '<path d="M3.5 4.5h9"/><path d="M3.5 8h9"/><path d="M3.5 11.5h5.5"/></svg>';
+
   /* ================= 渲染 ================= */
 
   function renderHead(view) {
@@ -265,7 +270,6 @@
 
         var counts = dueMap[item.date] || { pending: 0, done: 0 };
         var hasTask = counts.pending > 0 || counts.done > 0;
-        if (hasTask) { cls += " has-task"; }
 
         /* 名称行内容：法定节假日名 —— **只在"正日子"当天显示**（中秋只在中秋节那天，
            假期里的其他天不写，否则像是放了三个中秋），其余日子把名字放悬停提示里说明。 */
@@ -332,12 +336,21 @@
           kids.push(dueRow);
         }
 
-        /* 只有"有任务的那天"才可点整格跳转 —— 点一个没有待办的日子只会进到空态，
-           属于无效跳转，还容易误点（格子密集）。
-           新建走角落里那个小小的「＋」，与"看"分开，避免误点整格。 */
+        /* 格子本体**不响应点击** —— 格子又小又密、内容还多，整格可点很容易误触。
+           "看"和"加"都走格内的小按钮（鼠标进格子才浮现）：
+           有任务的那天才出现「清单」（跳这天的待办），任何一天都有「＋」（在这天新建）。 */
         var attrs = { class: cls, title: tip };
+
         if (hasTask) {
-          attrs.onclick = function () { gotoDay(item.date); };
+          kids.push(el("button", {
+            class: "cal-open",
+            html: LIST_SVG,
+            title: "查看这天的待办",
+            onclick: function (event) {
+              event.stopPropagation();
+              gotoDay(item.date);
+            }
+          }));
         }
 
         kids.push(el("button", {
@@ -361,7 +374,7 @@
       el("span", { class: "lg" }, [el("i", { class: "lg-dot adj" }), el("span", { text: "调休补班" })]),
       el("span", { class: "lg" }, [el("i", { class: "lg-dot weekend" }), el("span", { text: "周末" })]),
       el("span", { class: "lg" }, [el("i", { class: "lg-dot today" }), el("span", { text: "今天" })]),
-      el("span", { class: "lg" }, [el("i", { class: "lg-dot due" }), el("span", { text: "有待办（点击查看）" })])
+      el("span", { class: "lg" }, [el("i", { class: "lg-dot due" }), el("span", { text: "有待办" })])
     ]);
     gridBox.appendChild(legend);
   }

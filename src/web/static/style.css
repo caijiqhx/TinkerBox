@@ -1192,16 +1192,17 @@ mark.hit {
 
 .cal-cell.empty { background: transparent; border-color: transparent; box-shadow: none; }
 
-/* 可点（跳「某天待办」）的只有"有任务的那天"；其余格子（含占位空格）光标为默认 */
+/* 格子本体一律不可点 —— 格子又小又密、内容还多，整格可点太容易误触；
+   "看"与"加"都走格内的小按钮（见 .cal-open / .cal-add） */
 .cal-cell { cursor: default; }
-.cal-cell.has-task { cursor: pointer; }
 .cal-cell.empty { cursor: default; }
 
-/* 格内「＋」：平时完全不可见，鼠标进到格子才浮现 —— 与"点格子=看"分开，避免误点整格。
-   绝对定位在右下角，不参与布局（格子内容已经够满了），也不会一排加号显得杂乱。 */
+/* 格内小按钮：「清单」在左下、「＋」在右下。平时完全不可见，鼠标进格子才浮现 ——
+   格子本体不可点，这两个按钮才是"看"和"加"的入口。
+   绝对定位，不参与布局（格子内容已经够满了），也不会一排按钮显得杂乱。 */
+.cal-open,
 .cal-add {
   position: absolute;
-  right: 4px;
   bottom: 4px;
   width: 17px;
   height: 17px;
@@ -1217,9 +1218,14 @@ mark.hit {
   cursor: pointer;
   transition: opacity .14s, color .14s, border-color .14s;
 }
+.cal-open { left: 4px; }
+.cal-add { right: 4px; }
 /* 鼠标进格子 / 键盘聚焦到它时显现 */
+.cal-cell:hover .cal-open,
 .cal-cell:hover .cal-add,
+.cal-open:focus,
 .cal-add:focus { opacity: 1; }
+.cal-open:hover,
 .cal-add:hover { color: var(--accent); border-color: var(--accent); }
 
 /* 当天待办计数：未完成醒目（实心点，强调色）、已完成弱化（空心点，灰） */
