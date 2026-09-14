@@ -387,12 +387,23 @@
   /* ================= 面板的关闭途径 =================
      注册在模块层（脚本加载时一次）—— 写进 render() 里会随每次进入工具不断累积。 */
 
-  /* 点面板外面（或再点一次标题）就收起 */
+  /* 点面板外面（或再点一次标题）就收起。
+     这里必须分两趟，否则有个隐蔽的坑：
+     面板里的按钮在自己的 click 里可能重建节点（如"点年份 → 换成输入框"），
+     等事件冒泡到 document 时，那个按钮**已经被摘出 DOM**，再用 contains(target)
+     判断就会误判成"点在面板外" → 面板被关掉。
+     所以：① 捕获阶段（DOM 还是点击前的样子）先记下点是否在面板内；
+          ② 冒泡阶段只用这个记录来决定关不关。 */
+  var pickerClickInside = false;
+
   document.addEventListener("click", function (event) {
-    if (!state.pickerOpen) { return; }
-    var target = event.target;
-    if (pickerBox && pickerBox.contains && pickerBox.contains(target)) { return; }
-    if (titleBtn && titleBtn.contains && titleBtn.contains(target)) { return; }
+    pickerClickInside = !!(pickerBox && pickerBox.contains && pickerBox.contains(event.target));
+  }, true);
+
+  document.addEventListener("click", function (event) {
+    if (!state.pickerOpen) { pickerClickInside = false; return; }
+    if (pickerClickInside) { pickerClickInside = false; return; }
+    if (titleBtn && titleBtn.contains && titleBtn.contains(event.target)) { return; }
     setPickerOpen(false);
   });
 
