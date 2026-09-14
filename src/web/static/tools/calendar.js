@@ -252,15 +252,16 @@
         var hasTask = counts.pending > 0 || counts.done > 0;
         if (hasTask) { cls += " has-task"; }
 
-        /* 悬停提示：节日名 + **完整**农历（八月初三，格子里只放得下"初三"），
-           有待办再补一行明细 */
+        /* 悬停提示：第一行 = 节日名 + **完整**农历（八月初三，格子里只放得下"初三"），
+           第二行 = 当天待办情况（换行显示，挤在一行太长）。
+           提示层支持多行（white-space: pre-line），这里直接放 \n 即可。 */
         var lunarText = item.lunar_full || item.lunar || "";
         var tip = (item.name && lunarText) ? (item.name + " · " + lunarText)
                                            : (item.name || lunarText);
         if (hasTask) {
           var line = "待办 " + counts.pending + " 项未完成";
           if (counts.done) { line += "、" + counts.done + " 项已完成"; }
-          tip = (tip ? tip + " · " : "") + line;
+          tip = tip ? (tip + "\n" + line) : line;
         }
 
         var kids = [];
