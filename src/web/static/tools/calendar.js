@@ -29,6 +29,11 @@
       '<path d="' + d + '"/></svg>';
   }
 
+  /* 格内「＋」：给这一天新建任务。用内联 SVG（不用文本 + 号，避免字体缺字形） */
+  var PLUS_SVG = '<svg viewBox="0 0 16 16" class="ic" width="11" height="11" fill="none" ' +
+    'stroke="currentColor" stroke-width="2.6" stroke-linecap="round">' +
+    '<path d="M8 3.5v9"/><path d="M3.5 8h9"/></svg>';
+
   /* ================= 渲染 ================= */
 
   function renderHead(view) {
@@ -168,13 +173,24 @@
           kids.push(dueRow);
         }
 
-        /* 只有"有任务的那天"才可点跳转 —— 点一个没有待办的日子只会进到空态，
-           属于无效跳转，还容易误点（格子密集）。想给某天加任务，先在有任务的日子
-           进去后再改，或在待办里设到期日。 */
+        /* 只有"有任务的那天"才可点整格跳转 —— 点一个没有待办的日子只会进到空态，
+           属于无效跳转，还容易误点（格子密集）。
+           新建走角落里那个小小的「＋」，与"看"分开，避免误点整格。 */
         var attrs = { class: cls, title: tip };
         if (hasTask) {
           attrs.onclick = function () { gotoDay(item.date); };
         }
+
+        kids.push(el("button", {
+          class: "cal-add",
+          html: PLUS_SVG,
+          title: "在这一天新建任务",
+          onclick: function (event) {
+            event.stopPropagation();
+            gotoAdd(item.date);
+          }
+        }));
+
         grid.appendChild(el("div", attrs, kids));
       })(view.items[n]);
     }
@@ -222,6 +238,11 @@
      日期通过 hash 的 query 传递，由 todo 前端自己解析。 */
   function gotoDay(date) {
     window.location.hash = "#/todo?due=" + date;
+  }
+
+  /* 点格子里的「＋」→ 跳到那天并**直接聚焦添加框**（add=1），落地就能打字 */
+  function gotoAdd(date) {
+    window.location.hash = "#/todo?due=" + date + "&add=1";
   }
 
   function render(container, context) {

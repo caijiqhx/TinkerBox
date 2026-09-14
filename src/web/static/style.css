@@ -971,6 +971,7 @@ mark.hit {
   gap: 4px;
 }
 .cal-cell {
+  position: relative;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   min-height: 64px;
@@ -1052,6 +1053,29 @@ mark.hit {
 .cal-cell { cursor: default; }
 .cal-cell.has-task { cursor: pointer; }
 .cal-cell.empty { cursor: default; }
+
+/* 格内「＋」：常驻但很淡，鼠标进格子才明显 —— 与"点格子=看"分开，避免误点整格。
+   绝对定位在右下角，不参与布局（格子内容已经够满了）。 */
+.cal-add {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--text-mute);
+  opacity: .4;
+  cursor: pointer;
+  transition: opacity .14s, color .14s, border-color .14s;
+}
+.cal-cell:hover .cal-add { opacity: 1; }
+.cal-add:hover { color: var(--accent); border-color: var(--accent); opacity: 1; }
 
 /* 当天待办计数：未完成醒目（实心点，强调色）、已完成弱化（空心点，灰） */
 .cal-due {

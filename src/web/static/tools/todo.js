@@ -22,6 +22,7 @@
     view: "my_day",
     listId: "default",
     due: "",               /* 「某天待办」的目标日期（ISO）；其余视图恒为空 */
+    focusAdd: false,       /* 从日历的「＋」进来：刷新完成后把光标放进添加框 */
     keyword: "",
     board: null,
     selected: null,
@@ -190,6 +191,11 @@
         renderBulkBar();
         renderDetail();
       });
+      /* 工具栏不参与重建（只在 render 时建一次），所以这里聚焦不会被冲掉 */
+      if (state.focusAdd && addInput) {
+        state.focusAdd = false;
+        addInput.focus();
+      }
       return data;
     }).catch(function (err) {
       ctx.toast("读取待办失败：" + err.message, true);
@@ -1430,6 +1436,7 @@
     state.view = "my_day";
     state.listId = "default";
     state.due = "";
+    state.focusAdd = false;
     state.keyword = "";
     state.selected = null;
     state.stepDraft = "";
@@ -1438,13 +1445,15 @@
     state.picking = false;
     state.picked = [];
 
-    /* 从日历格子跳过来：hash 形如 #/todo?due=2026-02-17。
+    /* 从日历格子跳过来：hash 形如 #/todo?due=2026-02-17（&add=1 表示落地就聚焦添加框）。
        外壳的 currentKey() 会把 ? 后面丢掉（只用于路由匹配），
        所以日期参数在这里自己读。 */
     var hashMatch = /[?&]due=(\d{4}-\d{2}-\d{2})/.exec(window.location.hash || "");
     if (hashMatch) {
       state.view = "day";
       state.due = hashMatch[1];
+      /* 日历格子里点「＋」进来的：省掉"再点一次输入框" */
+      state.focusAdd = /[?&]add=1/.test(window.location.hash || "");
     }
 
     shell = el("div", { class: "todo-shell without-detail" });
