@@ -252,8 +252,11 @@
         var hasTask = counts.pending > 0 || counts.done > 0;
         if (hasTask) { cls += " has-task"; }
 
-        /* 悬停提示：节日/农历打底，有待办再补一行明细 */
-        var tip = item.name || item.lunar || "";
+        /* 悬停提示：节日名 + **完整**农历（八月初三，格子里只放得下"初三"），
+           有待办再补一行明细 */
+        var lunarText = item.lunar_full || item.lunar || "";
+        var tip = (item.name && lunarText) ? (item.name + " · " + lunarText)
+                                           : (item.name || lunarText);
         if (hasTask) {
           var line = "待办 " + counts.pending + " 项未完成";
           if (counts.done) { line += "、" + counts.done + " 项已完成"; }

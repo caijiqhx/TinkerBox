@@ -148,6 +148,44 @@ class LunarTest(unittest.TestCase):
         # 每一天都有农历文本（2000-2100 内）
         self.assertTrue(all(i["lunar"] for i in v["items"]))
 
+    def test_month_view_items_include_full_lunar(self):
+        """格子放不下完整农历，但悬停提示要用它（八月初三而不是"初三"）。"""
+        v = model.month_view(2026, 9)
+        by_day = {i["day"]: i["lunar_full"] for i in v["items"]}
+        self.assertEqual(by_day[25], "八月十五")     # 中秋
+        self.assertEqual(by_day[1], "七月二十")
+        # 完整农历始终"月+日"，不会像 lunar 那样在初一只给月名
+        v2 = model.month_view(2026, 2)
+        feb = {i["day"]: i["lunar_full"] for i in v2["items"]}
+        self.assertEqual(feb[17], "正月初一")
+        self.assertTrue(all(i["lunar_full"] for i in v2["items"]))
+
+
+class LunarFullTest(unittest.TestCase):
+    """完整农历（月 + 日），供悬停提示使用。"""
+
+    def test_always_includes_month_name(self):
+        # 与 lunar_str 的差别：初一时不再是光秃秃的"正月"，而是"正月初一"
+        self.assertEqual(model.lunar_full("2026-02-17"), "正月初一")
+        self.assertEqual(model.lunar_str("2026-02-17"), "正月")
+        # 普通日子同样带月名
+        self.assertEqual(model.lunar_full("2026-02-18"), "正月初二")
+        self.assertEqual(model.lunar_full("2026-09-25"), "八月十五")   # 中秋
+        self.assertEqual(model.lunar_full("2026-06-19"), "五月初五")   # 端午
+        self.assertEqual(model.lunar_full("2026-01-01"), "冬月十三")
+
+    def test_leap_month(self):
+        self.assertEqual(model.lunar_full("2023-03-22"), "闰二月初一")
+        self.assertEqual(model.lunar_full("2023-03-23"), "闰二月初二")
+
+    def test_range_edges_and_bad_input(self):
+        self.assertEqual(model.lunar_full("1900-01-31"), "正月初一")
+        self.assertEqual(model.lunar_full("2100-12-31"), "腊月初一")
+        self.assertEqual(model.lunar_full("2101-01-01"), "")     # 越界
+        self.assertEqual(model.lunar_full("1899-12-31"), "")
+        self.assertEqual(model.lunar_full("abc"), "")            # 非法
+        self.assertEqual(model.lunar_full(""), "")
+
 
 class OverviewTest(unittest.TestCase):
     """月份概览（节假日 / 调休 数量与跨度）。"""

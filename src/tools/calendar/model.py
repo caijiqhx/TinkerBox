@@ -150,7 +150,7 @@ def _lunar_day_cn(lda):
 
 
 def lunar_str(day):
-    """公历日期（'YYYY-MM-DD'）→ 农历展示文本。
+    """公历日期（'YYYY-MM-DD'）→ 农历展示文本（**短**形式，用于日历格子）。
 
     每月初一显示月名（正月 / 闰二月 …），其余显示日名（初二 / 十五 / 廿九）。
     支持 1900-01-31 ~ 2100-12-31，越界或非法日期返回空串（前端不显示）。
@@ -168,6 +168,26 @@ def lunar_str(day):
     if lda == 1:
         return ("闰" if is_leap else "") + _LUNAR_MONTHS[lmo] + "月"
     return _lunar_day_cn(lda)
+
+
+def lunar_full(day):
+    """公历日期（'YYYY-MM-DD'）→ **完整**农历文本（八月初三 / 闰二月初一）。
+
+    与 lunar_str 的差别：那边在初一只给月名（格子省空间），这里始终给"月 + 日"，
+    供悬停提示用 —— 只说"初三"看不出是哪个月。
+    范围与非法值的处理同 lunar_str（越界返回空串）。
+    """
+    try:
+        y, m, d = (int(x) for x in day.split("-"))
+    except (ValueError, AttributeError):
+        return ""
+    if not (1900 <= y <= 2100 and 1 <= m <= 12 and 1 <= d <= 31):
+        return ""
+    got = _solar2lunar(y, m, d)
+    if got is None:
+        return ""
+    _lyr, lmo, lda, is_leap = got
+    return ("闰" if is_leap else "") + _LUNAR_MONTHS[lmo] + "月" + _lunar_day_cn(lda)
 
 
 #: 内置数据文件（随程序包走）
@@ -298,6 +318,8 @@ def month_view(year, month, today=None, years=None):
             "status": status["status"],
             "name": status["name"],
             "lunar": lunar_str(iso),
+            # 完整农历（八月初三）：格子里放不下，供悬停提示用
+            "lunar_full": lunar_full(iso),
         })
 
     # 月份概览：本月节假日 / 调休 数量与跨度（跨月假日两侧都只算本月的天数）
