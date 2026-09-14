@@ -1109,11 +1109,14 @@ mark.hit {
 
 .cal-num { font-size: 16px; font-weight: 600; color: var(--text); }
 .cal-lunar {
-  font-size: 10.5px;
+  font-size: 10px;              /* 农历后面可能还跟着节日/节气（「初三 · 立秋」），略缩以放得下 */
   color: var(--text-dim);
   line-height: 1;
   text-align: center;
   white-space: nowrap;
+  max-width: 100%;              /* 极长的组合也不能顶出格子外 */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cal-name { font-size: 10.5px; color: var(--danger); line-height: 1; text-align: center; }
 .cal-adj {
@@ -1127,6 +1130,11 @@ mark.hit {
   line-height: 1.4;
   letter-spacing: .5px;
 }
+
+/* 农历行里跟在后面的节日/节气：比农历的灰更实一点，否则小字容易看不见 */
+.cal-extra { color: var(--text); }
+.cal-cell.holiday .cal-extra { color: var(--danger); }
+.cal-cell.workday .cal-extra { color: var(--warn); }
 
 /* 业务四态：节假日红 / 调休橙 / 周末灰 / 普通默认。
    节假日和调休都是整块着色（底 + 描边 + 文字同色系），一眼可辨。 */

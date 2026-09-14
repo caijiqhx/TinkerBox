@@ -79,6 +79,14 @@
 
   function noFocus(event) { event.preventDefault(); }
 
+  /* 提示里同一件事别说两遍：已有的名称包含它（如「清明节」含「清明」）就算重复 */
+  function nameCovered(parts, text) {
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].indexOf(text) >= 0) { return true; }
+    }
+    return false;
+  }
+
   /* ================= 年月快速选择面板 =================
      点标题弹出：年份行 + 12 个月格 + 回到今天。
      - 近处用"点"（月份格）；远处用"打"（点年份变输入框，跳十年八年比一格一格翻快得多） */
@@ -252,12 +260,26 @@
         var hasTask = counts.pending > 0 || counts.done > 0;
         if (hasTask) { cls += " has-task"; }
 
-        /* 悬停提示：第一行 = 节日名 + **完整**农历（八月初三，格子里只放得下"初三"），
+        /* 名称行内容：法定节假日名（调休日显示「班」徽标，不占这里） */
+        var badgeText = (item.status === "holiday" && item.name) ? item.name : "";
+
+        /* 农历行补一个"今天是什么日子"：农历节日优先，其次节气。
+           同一天最多补一个（3/20 这种"春分 + 龙抬头"撞车的日子，另一个留给悬停提示）；
+           与上面的节日名重复时省略 —— 清明那天已经写了"清明节"，不必再来个"清明"。 */
+        var extra = item.fest || item.term || "";
+        if (extra && badgeText && badgeText.indexOf(extra) >= 0) { extra = ""; }
+        var lunarLine = item.lunar || "";
+        if (extra) { lunarLine = lunarLine ? (lunarLine + " · " + extra) : extra; }
+
+        /* 悬停提示：第一行 = 节日名 / 农历节日 / 节气 / 完整农历（八月初三，格子里只放得下"初三"），
            第二行 = 当天待办情况（换行显示，挤在一行太长）。
            提示层支持多行（white-space: pre-line），这里直接放 \n 即可。 */
-        var lunarText = item.lunar_full || item.lunar || "";
-        var tip = (item.name && lunarText) ? (item.name + " · " + lunarText)
-                                           : (item.name || lunarText);
+        var parts = [];
+        if (badgeText) { parts.push(badgeText); }
+        if (item.fest && !nameCovered(parts, item.fest)) { parts.push(item.fest); }
+        if (item.term && !nameCovered(parts, item.term)) { parts.push(item.term); }
+        if (item.lunar_full) { parts.push(item.lunar_full); }
+        var tip = parts.join(" · ");
         if (hasTask) {
           var line = "待办 " + counts.pending + " 项未完成";
           if (counts.done) { line += "、" + counts.done + " 项已完成"; }
@@ -268,15 +290,26 @@
         kids.push(el("span", { class: "cal-num", text: String(item.day) }));
 
         /* 业务行：节假日名 / 调休「班」徽标（比农历重要，放前面） */
-        if (item.status === "holiday" && item.name) {
-          kids.push(el("span", { class: "cal-name", text: item.name }));
+        if (badgeText) {
+          kids.push(el("span", { class: "cal-name", text: badgeText }));
         } else if (item.status === "workday") {
           kids.push(el("span", { class: "cal-adj", text: "班" }));
         }
 
-        /* 农历行：每月初一显示月名（正月 / 闰二月），其余显示日名（初二 / 十五） */
-        if (item.lunar) {
-          kids.push(el("span", { class: "cal-lunar", text: item.lunar }));
+        /* 农历行：每月初一显示月名（正月 / 闰二月），其余显示日名（初二 / 十五）；
+           后面跟上农历节日 / 节气（如「初三 · 立秋」）——单独一层样式，比农历的灰更实一点 */
+        if (lunarLine) {
+          var lunarNode = el("span", { class: "cal-lunar" });
+          if (item.lunar) {
+            lunarNode.appendChild(el("span", { text: item.lunar }));
+          }
+          if (extra) {
+            lunarNode.appendChild(el("span", {
+              class: "cal-extra",
+              text: (item.lunar ? " · " : "") + extra
+            }));
+          }
+          kids.push(lunarNode);
         }
 
         /* 当天待办：未完成醒目（实心点 + 数字）、已完成弱化（空心点），

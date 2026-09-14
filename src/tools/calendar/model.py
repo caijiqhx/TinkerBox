@@ -54,6 +54,55 @@ _LUNAR_INFO = [
     0x0d520,                                                                                  # 2100
 ]
 
+#: 二十四节气 1900-2100 压缩表（社区通用表，与 solarlunar 等实现一致）。
+#: 编码：每年 30 位十六进制 = 6 组（每组 5 位十六进制 → 6 位十进制字符串），
+#:       每组十进制按 [1位][2位][1位][2位] 拆开 → 正好 4 个节气的"日"；
+#:       6 组 × 4 = 24 个节气，顺序见 _TERM_NAMES（1=小寒 … 24=冬至）。
+_TERM_INFO = [
+    "9778397bd097c36b0b6fc9274c91aa", "97b6b97bd19801ec9210c965cc920e", "97bcf97c3598082c95f8c965cc920f", "97bd0b06bdb0722c965ce1cfcc920f", "b027097bd097c36b0b6fc9274c91aa", "97b6b97bd19801ec9210c965cc920e", "97bcf97c359801ec95f8c965cc920f", "97bd0b06bdb0722c965ce1cfcc920f", "b027097bd097c36b0b6fc9274c91aa", "97b6b97bd19801ec9210c965cc920e",  # 1900-1909
+    "97bcf97c359801ec95f8c965cc920f", "97bd0b06bdb0722c965ce1cfcc920f", "b027097bd097c36b0b6fc9274c91aa", "9778397bd19801ec9210c965cc920e", "97b6b97bd19801ec95f8c965cc920f", "97bd09801d98082c95f8e1cfcc920f", "97bd097bd097c36b0b6fc9210c8dc2", "9778397bd197c36c9210c9274c91aa", "97b6b97bd19801ec95f8c965cc920e", "97bd09801d98082c95f8e1cfcc920f",  # 1900-1919
+    "97bd097bd097c36b0b6fc9210c8dc2", "9778397bd097c36c9210c9274c91aa", "97b6b97bd19801ec95f8c965cc920e", "97bcf97c3598082c95f8e1cfcc920f", "97bd097bd097c36b0b6fc9210c8dc2", "9778397bd097c36c9210c9274c91aa", "97b6b97bd19801ec9210c965cc920e", "97bcf97c3598082c95f8c965cc920f", "97bd097bd097c35b0b6fc920fb0722", "9778397bd097c36b0b6fc9274c91aa",  # 1900-1929
+    "97b6b97bd19801ec9210c965cc920e", "97bcf97c3598082c95f8c965cc920f", "97bd097bd097c35b0b6fc920fb0722", "9778397bd097c36b0b6fc9274c91aa", "97b6b97bd19801ec9210c965cc920e", "97bcf97c359801ec95f8c965cc920f", "97bd097bd097c35b0b6fc920fb0722", "9778397bd097c36b0b6fc9274c91aa", "97b6b97bd19801ec9210c965cc920e", "97bcf97c359801ec95f8c965cc920f",  # 1900-1939
+    "97bd097bd097c35b0b6fc920fb0722", "9778397bd097c36b0b6fc9274c91aa", "97b6b97bd19801ec9210c965cc920e", "97bcf97c359801ec95f8c965cc920f", "97bd097bd07f595b0b6fc920fb0722", "9778397bd097c36b0b6fc9210c8dc2", "9778397bd19801ec9210c9274c920e", "97b6b97bd19801ec95f8c965cc920f", "97bd07f5307f595b0b0bc920fb0722", "7f0e397bd097c36b0b6fc9210c8dc2",  # 1900-1949
+    "9778397bd097c36c9210c9274c920e", "97b6b97bd19801ec95f8c965cc920f", "97bd07f5307f595b0b0bc920fb0722", "7f0e397bd097c36b0b6fc9210c8dc2", "9778397bd097c36c9210c9274c91aa", "97b6b97bd19801ec9210c965cc920e", "97bd07f1487f595b0b0bc920fb0722", "7f0e397bd097c36b0b6fc9210c8dc2", "9778397bd097c36b0b6fc9274c91aa", "97b6b97bd19801ec9210c965cc920e",  # 1900-1959
+    "97bcf7f1487f595b0b0bb0b6fb0722", "7f0e397bd097c35b0b6fc920fb0722", "9778397bd097c36b0b6fc9274c91aa", "97b6b97bd19801ec9210c965cc920e", "97bcf7f1487f595b0b0bb0b6fb0722", "7f0e397bd097c35b0b6fc920fb0722", "9778397bd097c36b0b6fc9274c91aa", "97b6b97bd19801ec9210c965cc920e", "97bcf7f1487f531b0b0bb0b6fb0722", "7f0e397bd097c35b0b6fc920fb0722",  # 1900-1969
+    "9778397bd097c36b0b6fc9274c91aa", "97b6b97bd19801ec9210c965cc920e", "97bcf7f1487f531b0b0bb0b6fb0722", "7f0e397bd07f595b0b6fc920fb0722", "9778397bd097c36b0b6fc9274c91aa", "97b6b97bd19801ec9210c9274c920e", "97bcf7f0e47f531b0b0bb0b6fb0722", "7f0e397bd07f595b0b0bc920fb0722", "9778397bd097c36b0b6fc9210c91aa", "97b6b97bd197c36c9210c9274c920e",  # 1900-1979
+    "97bcf7f0e47f531b0b0bb0b6fb0722", "7f0e397bd07f595b0b0bc920fb0722", "9778397bd097c36b0b6fc9210c8dc2", "9778397bd097c36c9210c9274c920e", "97b6b7f0e47f531b0723b0b6fb0722", "7f0e37f5307f595b0b0bc920fb0722", "7f0e397bd097c36b0b6fc9210c8dc2", "9778397bd097c36b0b70c9274c91aa", "97b6b7f0e47f531b0723b0b6fb0721", "7f0e37f1487f595b0b0bb0b6fb0722",  # 1900-1989
+    "7f0e397bd097c35b0b6fc9210c8dc2", "9778397bd097c36b0b6fc9274c91aa", "97b6b7f0e47f531b0723b0b6fb0721", "7f0e27f1487f595b0b0bb0b6fb0722", "7f0e397bd097c35b0b6fc920fb0722", "9778397bd097c36b0b6fc9274c91aa", "97b6b7f0e47f531b0723b0b6fb0721", "7f0e27f1487f531b0b0bb0b6fb0722", "7f0e397bd097c35b0b6fc920fb0722", "9778397bd097c36b0b6fc9274c91aa",  # 1900-1999
+    "97b6b7f0e47f531b0723b0b6fb0721", "7f0e27f1487f531b0b0bb0b6fb0722", "7f0e397bd097c35b0b6fc920fb0722", "9778397bd097c36b0b6fc9274c91aa", "97b6b7f0e47f531b0723b0b6fb0721", "7f0e27f1487f531b0b0bb0b6fb0722", "7f0e397bd07f595b0b0bc920fb0722", "9778397bd097c36b0b6fc9274c91aa", "97b6b7f0e47f531b0723b0787b0721", "7f0e27f0e47f531b0b0bb0b6fb0722",  # 1900-2009
+    "7f0e397bd07f595b0b0bc920fb0722", "9778397bd097c36b0b6fc9210c91aa", "97b6b7f0e47f149b0723b0787b0721", "7f0e27f0e47f531b0723b0b6fb0722", "7f0e397bd07f595b0b0bc920fb0722", "9778397bd097c36b0b6fc9210c8dc2", "977837f0e37f149b0723b0787b0721", "7f07e7f0e47f531b0723b0b6fb0722", "7f0e37f5307f595b0b0bc920fb0722", "7f0e397bd097c35b0b6fc9210c8dc2",  # 1900-2019
+    "977837f0e37f14998082b0787b0721", "7f07e7f0e47f531b0723b0b6fb0721", "7f0e37f1487f595b0b0bb0b6fb0722", "7f0e397bd097c35b0b6fc9210c8dc2", "977837f0e37f14998082b0787b06bd", "7f07e7f0e47f531b0723b0b6fb0721", "7f0e27f1487f531b0b0bb0b6fb0722", "7f0e397bd097c35b0b6fc920fb0722", "977837f0e37f14998082b0787b06bd", "7f07e7f0e47f531b0723b0b6fb0721",  # 1900-2029
+    "7f0e27f1487f531b0b0bb0b6fb0722", "7f0e397bd097c35b0b6fc920fb0722", "977837f0e37f14998082b0787b06bd", "7f07e7f0e47f531b0723b0b6fb0721", "7f0e27f1487f531b0b0bb0b6fb0722", "7f0e397bd07f595b0b0bc920fb0722", "977837f0e37f14998082b0787b06bd", "7f07e7f0e47f531b0723b0b6fb0721", "7f0e27f1487f531b0b0bb0b6fb0722", "7f0e397bd07f595b0b0bc920fb0722",  # 1900-2039
+    "977837f0e37f14998082b0787b06bd", "7f07e7f0e47f149b0723b0787b0721", "7f0e27f0e47f531b0b0bb0b6fb0722", "7f0e397bd07f595b0b0bc920fb0722", "977837f0e37f14998082b0723b06bd", "7f07e7f0e37f149b0723b0787b0721", "7f0e27f0e47f531b0723b0b6fb0722", "7f0e397bd07f595b0b0bc920fb0722", "977837f0e37f14898082b0723b02d5", "7ec967f0e37f14998082b0787b0721",  # 1900-2049
+    "7f07e7f0e47f531b0723b0b6fb0722", "7f0e37f1487f595b0b0bb0b6fb0722", "7f0e37f0e37f14898082b0723b02d5", "7ec967f0e37f14998082b0787b0721", "7f07e7f0e47f531b0723b0b6fb0722", "7f0e37f1487f531b0b0bb0b6fb0722", "7f0e37f0e37f14898082b0723b02d5", "7ec967f0e37f14998082b0787b06bd", "7f07e7f0e47f531b0723b0b6fb0721", "7f0e37f1487f531b0b0bb0b6fb0722",  # 1900-2059
+    "7f0e37f0e37f14898082b072297c35", "7ec967f0e37f14998082b0787b06bd", "7f07e7f0e47f531b0723b0b6fb0721", "7f0e27f1487f531b0b0bb0b6fb0722", "7f0e37f0e37f14898082b072297c35", "7ec967f0e37f14998082b0787b06bd", "7f07e7f0e47f531b0723b0b6fb0721", "7f0e27f1487f531b0b0bb0b6fb0722", "7f0e37f0e366aa89801eb072297c35", "7ec967f0e37f14998082b0787b06bd",  # 1900-2069
+    "7f07e7f0e47f149b0723b0787b0721", "7f0e27f1487f531b0b0bb0b6fb0722", "7f0e37f0e366aa89801eb072297c35", "7ec967f0e37f14998082b0723b06bd", "7f07e7f0e47f149b0723b0787b0721", "7f0e27f0e47f531b0723b0b6fb0722", "7f0e37f0e366aa89801eb072297c35", "7ec967f0e37f14998082b0723b06bd", "7f07e7f0e37f14998083b0787b0721", "7f0e27f0e47f531b0723b0b6fb0722",  # 1900-2079
+    "7f0e37f0e366aa89801eb072297c35", "7ec967f0e37f14898082b0723b02d5", "7f07e7f0e37f14998082b0787b0721", "7f07e7f0e47f531b0723b0b6fb0722", "7f0e36665b66aa89801e9808297c35", "665f67f0e37f14898082b0723b02d5", "7ec967f0e37f14998082b0787b0721", "7f07e7f0e47f531b0723b0b6fb0722", "7f0e36665b66a449801e9808297c35", "665f67f0e37f14898082b0723b02d5",  # 1900-2089
+    "7ec967f0e37f14998082b0787b06bd", "7f07e7f0e47f531b0723b0b6fb0721", "7f0e36665b66a449801e9808297c35", "665f67f0e37f14898082b072297c35", "7ec967f0e37f14998082b0787b06bd", "7f07e7f0e47f531b0723b0b6fb0721", "7f0e26665b66a449801e9808297c35", "665f67f0e37f1489801eb072297c35", "7ec967f0e37f14998082b0787b06bd", "7f07e7f0e47f531b0723b0b6fb0721",  # 1900-2099
+    "7f0e27f1487f531b0b0bb0b6fb0722",  # 2100
+]
+
+#: 二十四节气名（索引 0 占位不用，便于用 1~24 直接取值）
+_TERM_NAMES = ("", "小寒", "大寒", "立春", "雨水", "惊蛰", "春分", "清明", "谷雨",
+               "立夏", "小满", "芒种", "夏至", "小暑", "大暑", "立秋", "处暑",
+               "白露", "秋分", "寒露", "霜降", "立冬", "小雪", "大雪", "冬至")
+
+#: 农历传统节日（按月、日；闰月不重复过）。法定放假的那几个（春节/端午/中秋）
+#: 与国务院数据重名，展示时按优先级去重（见前端）。
+_LUNAR_FESTIVALS = {
+    (1, 1): "春节",
+    (1, 15): "元宵",
+    (2, 2): "龙抬头",
+    (5, 5): "端午",
+    (7, 7): "七夕",
+    (7, 15): "中元",
+    (8, 15): "中秋",
+    (9, 9): "重阳",
+    (12, 8): "腊八",
+    (12, 23): "小年",     # 北方小年；南方为腊月廿四，这里两天都标
+    (12, 24): "小年",
+}
+
 #: 农历月名（索引 0 不用；1=正月 … 12=腊月）
 _LUNAR_MONTHS = ("", "正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊")
 #: 农历日名的十位（1=十，2=廿）与个位数字
@@ -190,6 +239,78 @@ def lunar_full(day):
     return ("闰" if is_leap else "") + _LUNAR_MONTHS[lmo] + "月" + _lunar_day_cn(lda)
 
 
+def _term_day(year, n):
+    """该年第 n 个节气（1=小寒 … 24=冬至）落在几号。
+
+    表里每年 30 位十六进制 = 6 组，每组 5 位十六进制转成 6 位十进制字符串，
+    再按 [1][2][1][2] 拆成 4 个日号 —— 所以每 4 个节气共用一组。
+    """
+    row = _TERM_INFO[year - 1900]
+    base = ((n - 1) // 4) * 5
+    text = str(int(row[base:base + 5], 16))
+    if len(text) != 6:          # 数据异常就当作没有（不抛异常，日历照常显示）
+        return -1
+    slot = (n - 1) % 4
+    if slot == 0:
+        return int(text[0])
+    if slot == 1:
+        return int(text[1:3])
+    if slot == 2:
+        return int(text[3])
+    return int(text[4:6])
+
+
+def solar_term(day):
+    """公历日期（'YYYY-MM-DD'）→ 该日的二十四节气名；不是节气日则空串。
+
+    每月有「节」「气」两个：第 m 月对应第 m*2-1、m*2 个节气（1=小寒 … 24=冬至）。
+    数据表覆盖 1900-2100（与农历表同范围），越界或非法日期返回空串。
+    """
+    try:
+        y, m, d = (int(x) for x in day.split("-"))
+    except (ValueError, AttributeError):
+        return ""
+    if not (1900 <= y <= 2100 and 1 <= m <= 12 and 1 <= d <= 31):
+        return ""
+    for n in (m * 2 - 1, m * 2):
+        if _term_day(y, n) == d:
+            return _TERM_NAMES[n]
+    return ""
+
+
+def lunar_festival(day):
+    """公历日期（'YYYY-MM-DD'）→ 农历传统节日名（元宵 / 七夕 / 腊八 / 除夕 …）。
+
+    **纯计算**：从农历月日推得，不依赖任何外部数据（内网离线也有）。
+    闰月不重复过节；范围同农历表（1900-2100），越界或非法返回空串。
+    """
+    try:
+        y, m, d = (int(x) for x in day.split("-"))
+    except (ValueError, AttributeError):
+        return ""
+    if not (1900 <= y <= 2100 and 1 <= m <= 12 and 1 <= d <= 31):
+        return ""
+    got = _solar2lunar(y, m, d)
+    if got is None:
+        return ""
+    _lyr, lmo, lda, is_leap = got
+    if is_leap:
+        return ""
+    name = _LUNAR_FESTIVALS.get((lmo, lda))
+    if name:
+        return name
+    # 除夕 = 腊月最后一天（次日是正月初一）—— 腊月可能廿九或三十
+    if lmo == 12:
+        try:
+            nxt = datetime.date(y, m, d) + datetime.timedelta(days=1)
+        except ValueError:
+            return ""
+        got2 = _solar2lunar(nxt.year, nxt.month, nxt.day)
+        if got2 and got2[1] == 1 and got2[2] == 1:
+            return "除夕"
+    return ""
+
+
 #: 内置数据文件（随程序包走）
 _BUNDLED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "holidays.json")
 
@@ -320,6 +441,9 @@ def month_view(year, month, today=None, years=None):
             "lunar": lunar_str(iso),
             # 完整农历（八月初三）：格子里放不下，供悬停提示用
             "lunar_full": lunar_full(iso),
+            # 农历传统节日（元宵/七夕/腊八…）与二十四节气：格子里跟在农历后面显示
+            "fest": lunar_festival(iso),
+            "term": solar_term(iso),
         })
 
     # 月份概览：本月节假日 / 调休 数量与跨度（跨月假日两侧都只算本月的天数）

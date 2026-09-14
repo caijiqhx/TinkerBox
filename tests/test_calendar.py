@@ -187,6 +187,84 @@ class LunarFullTest(unittest.TestCase):
         self.assertEqual(model.lunar_full(""), "")
 
 
+class SolarTermTest(unittest.TestCase):
+    """二十四节气（内置 1900-2100 压缩表，与 solarlunar 逐条核对过）。"""
+
+    def test_known_terms_2026(self):
+        self.assertEqual(model.solar_term("2026-01-05"), "小寒")
+        self.assertEqual(model.solar_term("2026-02-04"), "立春")
+        self.assertEqual(model.solar_term("2026-04-05"), "清明")
+        self.assertEqual(model.solar_term("2026-06-21"), "夏至")
+        self.assertEqual(model.solar_term("2026-08-07"), "立秋")
+        self.assertEqual(model.solar_term("2026-12-22"), "冬至")
+
+    def test_non_term_day_is_empty(self):
+        self.assertEqual(model.solar_term("2026-01-01"), "")
+        self.assertEqual(model.solar_term("2026-02-05"), "")
+
+    def test_each_year_has_24_valid_days_in_month_order(self):
+        # 每个节气都要落在合法日号上，且第 m 月的两个节气日号递增（小寒<大寒、立春<雨水…）
+        for year in (1900, 1950, 2000, 2026, 2100):
+            for n in range(1, 25, 2):
+                first, second = model._term_day(year, n), model._term_day(year, n + 1)
+                self.assertTrue(1 <= first < second <= 31, (year, n, first, second))
+
+    def test_range_and_bad_input(self):
+        self.assertEqual(model.solar_term("2101-01-01"), "")
+        self.assertEqual(model.solar_term("1899-12-31"), "")
+        self.assertEqual(model.solar_term("abc"), "")
+        self.assertEqual(model.solar_term(""), "")
+
+
+class LunarFestivalTest(unittest.TestCase):
+    """农历传统节日（纯计算，不依赖任何外部数据）。"""
+
+    def test_common_festivals_2026(self):
+        self.assertEqual(model.lunar_festival("2026-01-26"), "腊八")     # 腊月初八
+        self.assertEqual(model.lunar_festival("2026-02-17"), "春节")     # 正月初一
+        self.assertEqual(model.lunar_festival("2026-03-03"), "元宵")     # 正月十五
+        self.assertEqual(model.lunar_festival("2026-03-20"), "龙抬头")   # 二月初二
+        self.assertEqual(model.lunar_festival("2026-06-19"), "端午")     # 五月初五
+        self.assertEqual(model.lunar_festival("2026-08-19"), "七夕")     # 七月初七
+        self.assertEqual(model.lunar_festival("2026-08-27"), "中元")     # 七月十五
+        self.assertEqual(model.lunar_festival("2026-09-25"), "中秋")     # 八月十五
+        self.assertEqual(model.lunar_festival("2026-10-18"), "重阳")     # 九月初九
+
+    def test_new_years_eve_is_last_day_of_lunar_december(self):
+        # 2026 腊月只有廿九 —— 除夕就是廿九，不是"三十"（这里按次日是初一判定）
+        self.assertEqual(model.lunar_festival("2026-02-16"), "除夕")
+        self.assertEqual(model.lunar_full("2026-02-16"), "腊月廿九")
+        self.assertEqual(model.lunar_festival("2026-02-15"), "")        # 前一天不算
+
+    def test_minor_new_year_covers_both_days(self):
+        self.assertEqual(model.lunar_festival("2026-02-10"), "小年")     # 腊月廿三（北方）
+        self.assertEqual(model.lunar_festival("2026-02-11"), "小年")     # 腊月廿四（南方）
+
+    def test_ordinary_day_is_empty(self):
+        self.assertEqual(model.lunar_festival("2026-02-12"), "")
+
+    def test_leap_month_is_not_a_festival_day(self):
+        # 2023 闰二月初一 ≠ 二月初二（龙抬头）；闰月不重复过节
+        self.assertEqual(model.lunar_full("2023-03-22"), "闰二月初一")
+        self.assertEqual(model.lunar_festival("2023-03-22"), "")
+
+    def test_range_and_bad_input(self):
+        self.assertEqual(model.lunar_festival("2101-01-01"), "")
+        self.assertEqual(model.lunar_festival("1899-12-31"), "")
+        self.assertEqual(model.lunar_festival("abc"), "")
+
+    def test_month_view_carries_fest_and_term(self):
+        feb = {i["day"]: i for i in model.month_view(2026, 2)["items"]}
+        self.assertEqual(feb[16]["fest"], "除夕")
+        self.assertEqual(feb[16]["term"], "")
+        self.assertEqual(feb[4]["term"], "立春")
+        self.assertEqual(feb[4]["fest"], "")
+        # 3/20 春分与龙抬头同日：两个字段各自独立（展示时的优先级由前端决定）
+        mar = {i["day"]: i for i in model.month_view(2026, 3)["items"]}
+        self.assertEqual(mar[20]["term"], "春分")
+        self.assertEqual(mar[20]["fest"], "龙抬头")
+
+
 class OverviewTest(unittest.TestCase):
     """月份概览（节假日 / 调休 数量与跨度）。"""
 
