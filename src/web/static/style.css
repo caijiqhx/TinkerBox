@@ -31,15 +31,16 @@
   --warn:         #c98a17;
 
   /* 日历：节假日 / 调休整块着色的底、描边与文字色。
-     假期 = 蓝（休息），调休补班 = 红（提醒这天要上班，别记错） */
-  --holiday-fg:   #3a6fd8;
-  --holiday-bg:   #e9f0fc;
-  --holiday-bg-hover: #dbe6fa;
-  --holiday-line: #3a6fd8;
-  --adjust-fg:    #d9534f;
-  --adjust-bg:    #fdeceb;
-  --adjust-bg-hover: #fbdcdb;
-  --adjust-line:  #d9534f;
+     刻意压低饱和（往颜色里"掺灰"）—— 纯正的原色铺满一屏会像默认控件。
+     假期 = 普鲁士蓝（休息），调休补班 = 砖红（提醒这天要上班，别记错） */
+  --holiday-fg:   #3d5a80;
+  --holiday-bg:   #e9eff6;
+  --holiday-bg-hover: #dde7f1;
+  --holiday-line: #3d5a80;
+  --adjust-fg:    #a94a41;
+  --adjust-bg:    #f7ecea;
+  --adjust-bg-hover: #f0dfdc;
+  --adjust-line:  #a94a41;
 
   --shadow-sm:    0 1px 2px rgba(53, 73, 94, .06);
   --shadow:       0 2px 6px rgba(53, 73, 94, .07), 0 8px 22px rgba(53, 73, 94, .06);
@@ -71,15 +72,15 @@
   --danger:       #e06a6a;
   --warn:         #d9a441;
 
-  /* 日历：深色主题用较淡的底 + 亮描边，保证深底上可读（假期蓝 / 调休红） */
-  --holiday-fg:   #7aa7ee;
-  --holiday-bg:   #1b2740;
-  --holiday-bg-hover: #223052;
-  --holiday-line: #7aa7ee;
-  --adjust-fg:    #e06a6a;
-  --adjust-bg:    #3a1e1e;
-  --adjust-bg-hover: #462626;
-  --adjust-line:  #e06a6a;
+  /* 日历：深色主题换成同色系的亮版（深底上要够亮才读得清） */
+  --holiday-fg:   #7f9dc4;
+  --holiday-bg:   #1a2534;
+  --holiday-bg-hover: #223046;
+  --holiday-line: #7f9dc4;
+  --adjust-fg:    #d08a80;
+  --adjust-bg:    #33221f;
+  --adjust-bg-hover: #3e2a26;
+  --adjust-line:  #d08a80;
 
   --shadow-sm:    0 1px 2px rgba(0, 0, 0, .3);
   --shadow:       0 2px 8px rgba(0, 0, 0, .35), 0 10px 26px rgba(0, 0, 0, .28);
