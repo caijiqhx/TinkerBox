@@ -168,11 +168,14 @@
           kids.push(dueRow);
         }
 
-        grid.appendChild(el("div", {
-          class: cls,
-          title: tip,
-          onclick: function () { gotoDay(item.date); }
-        }, kids));
+        /* 只有"有任务的那天"才可点跳转 —— 点一个没有待办的日子只会进到空态，
+           属于无效跳转，还容易误点（格子密集）。想给某天加任务，先在有任务的日子
+           进去后再改，或在待办里设到期日。 */
+        var attrs = { class: cls, title: tip };
+        if (hasTask) {
+          attrs.onclick = function () { gotoDay(item.date); };
+        }
+        grid.appendChild(el("div", attrs, kids));
       })(view.items[n]);
     }
     gridBox.appendChild(grid);

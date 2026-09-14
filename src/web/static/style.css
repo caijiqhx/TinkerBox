@@ -1048,8 +1048,9 @@ mark.hit {
 
 .cal-cell.empty { background: transparent; border-color: transparent; box-shadow: none; }
 
-/* 格子可点（跳「某天待办」）—— 占位空格不可点 */
-.cal-cell { cursor: pointer; }
+/* 可点（跳「某天待办」）的只有"有任务的那天"；其余格子（含占位空格）光标为默认 */
+.cal-cell { cursor: default; }
+.cal-cell.has-task { cursor: pointer; }
 .cal-cell.empty { cursor: default; }
 
 /* 当天待办计数：未完成醒目（实心点，强调色）、已完成弱化（空心点，灰） */
