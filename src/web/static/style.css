@@ -1175,11 +1175,19 @@ mark.hit {
   box-shadow: var(--shadow-sm);
 }
 
-/* 今天：品牌色描边。用 outline 而不是 box-shadow —— outline 画在边框外，
-   不会和假日/调休的底色、边框冲突（今天恰逢节假日时两种视觉同时成立） */
-.cal-cell.today {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+/* 今天：右上角一个品牌色小圆点。
+   早先是给格子套一圈 outline（画在边框外），但假期格子本身已有蓝底 + 蓝框，
+   今天再套一圈绿框就成了"蓝框套绿框"，两个颜色打架 —— 圆点与格子状态完全解耦，
+   不管那天是工作日 / 假期 / 调休都只是多一个点。 */
+.cal-cell.today::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .cal-cell.empty { background: transparent; border-color: transparent; box-shadow: none; }
@@ -1261,7 +1269,7 @@ mark.hit {
 .lg-dot.holiday { background: var(--holiday-fg); }
 .lg-dot.adj { background: var(--adjust-fg); }
 .lg-dot.weekend { background: var(--text-mute); }
-.lg-dot.today { box-shadow: inset 0 0 0 2px var(--accent); }
+.lg-dot.today { background: var(--accent); }
 .lg-dot.due {
   background: var(--accent);
   width: 7px;
