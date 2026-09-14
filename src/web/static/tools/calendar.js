@@ -260,22 +260,24 @@
         var hasTask = counts.pending > 0 || counts.done > 0;
         if (hasTask) { cls += " has-task"; }
 
-        /* 名称行内容：法定节假日名（调休日显示「班」徽标，不占这里） */
-        var badgeText = (item.status === "holiday" && item.name) ? item.name : "";
+        /* 名称行内容：法定节假日名 —— **只在"正日子"当天显示**（中秋只在中秋节那天，
+           假期里的其他天不写，否则像是放了三个中秋），其余日子把名字放悬停提示里说明。 */
+        var holidayName = (item.status === "holiday" && item.name) ? item.name : "";
+        var badgeText = (holidayName && item.fest_day) ? holidayName : "";
 
-        /* 农历行补一个"今天是什么日子"：农历节日优先，其次节气。
-           同一天最多补一个（3/20 这种"春分 + 龙抬头"撞车的日子，另一个留给悬停提示）；
-           与上面的节日名重复时省略 —— 清明那天已经写了"清明节"，不必再来个"清明"。 */
+        /* 农历行补一个"今天是什么日子"：农历节日优先，其次节气。 */
         var extra = item.fest || item.term || "";
         if (extra && badgeText && badgeText.indexOf(extra) >= 0) { extra = ""; }
-        var lunarLine = item.lunar || "";
-        if (extra) { lunarLine = lunarLine ? (lunarLine + " · " + extra) : extra; }
 
-        /* 悬停提示：第一行 = 节日名 / 农历节日 / 节气 / 完整农历（八月初三，格子里只放得下"初三"），
+        /* 有农历节日 / 节气时，格子里就用它**顶替**农历日 —— 完整农历（八月初三）
+           悬停提示里已经有，格子里不必再挤一个"初三"在旁边。 */
+        var lunarLine = extra || item.lunar || "";
+
+        /* 悬停提示：第一行 = 假期名 / 农历节日 / 节气 / 完整农历（八月初三，格子里只放得下"初三"），
            第二行 = 当天待办情况（换行显示，挤在一行太长）。
            提示层支持多行（white-space: pre-line），这里直接放 \n 即可。 */
         var parts = [];
-        if (badgeText) { parts.push(badgeText); }
+        if (holidayName && !nameCovered(parts, holidayName)) { parts.push(holidayName); }
         if (item.fest && !nameCovered(parts, item.fest)) { parts.push(item.fest); }
         if (item.term && !nameCovered(parts, item.term)) { parts.push(item.term); }
         if (item.lunar_full) { parts.push(item.lunar_full); }
@@ -296,18 +298,15 @@
           kids.push(el("span", { class: "cal-adj", text: "班" }));
         }
 
-        /* 农历行：每月初一显示月名（正月 / 闰二月），其余显示日名（初二 / 十五）；
-           后面跟上农历节日 / 节气（如「初三 · 立秋」）——单独一层样式，比农历的灰更实一点 */
+        /* 农历行：常态是农历（初一显示月名「正月」，其余显示「初二 / 十五」）；
+           当天有农历节日 / 节气时，整行换成它（如「立秋」「除夕」「龙抬头」）——
+           单独一层样式，比农历的灰更实一点 */
         if (lunarLine) {
           var lunarNode = el("span", { class: "cal-lunar" });
-          if (item.lunar) {
-            lunarNode.appendChild(el("span", { text: item.lunar }));
-          }
           if (extra) {
-            lunarNode.appendChild(el("span", {
-              class: "cal-extra",
-              text: (item.lunar ? " · " : "") + extra
-            }));
+            lunarNode.appendChild(el("span", { class: "cal-extra", text: extra }));
+          } else {
+            lunarNode.appendChild(el("span", { text: item.lunar }));
           }
           kids.push(lunarNode);
         }

@@ -311,6 +311,45 @@ def lunar_festival(day):
     return ""
 
 
+#: 公历固定日期的节日：(月, 日) → 名称。
+#: 只用于判断法定假期名是否落在"正日子"当天，不参与格子的日常显示。
+_SOLAR_FESTIVALS = {
+    (1, 1): "元旦",
+    (5, 1): "劳动节",
+    (10, 1): "国庆节",
+}
+
+
+def is_festival_day(day, holiday_name):
+    """该天是不是 holiday_name 这个法定假期的"正日子"。
+
+    国务院给出的数据是**整个假期挂同一个名字**（2026 中秋假期 9/25-9/27 全叫
+    "中秋节"），但格子里只该在真正的节日当天显示它，其余日子把名字收进悬停提示
+    （否则一眼看去像是放了三天中秋）。
+
+    判定方式：当天恰好是农历节日 / 节气 / 公历固定节日，且名字与假期名吻合。
+    """
+    if not holiday_name:
+        return False
+
+    fest = lunar_festival(day)
+    if fest and (fest in holiday_name or holiday_name in fest):
+        return True
+
+    term = solar_term(day)
+    if term and term in holiday_name:
+        return True
+
+    try:
+        _y, m, d = (int(x) for x in day.split("-"))
+    except (ValueError, AttributeError):
+        return False
+    for (fm, fd), name in _SOLAR_FESTIVALS.items():
+        if m == fm and d == fd and name in holiday_name:
+            return True
+    return False
+
+
 #: 内置数据文件（随程序包走）
 _BUNDLED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "holidays.json")
 
@@ -438,13 +477,25 @@ def month_view(year, month, today=None, years=None):
             "date": iso,
             "status": status["status"],
             "name": status["name"],
+            # 上面这个名字是否该显示在格子里：只有"正日子"才显示（中秋只在中秋节当天），
+            # 假期里的其他天只在悬停提示里说明 —— 否则三天都写"中秋节"，像是放了三次中秋
+            "fest_day": (status["status"] == HOLIDAY
+                         and is_festival_day(iso, status["name"])),
             "lunar": lunar_str(iso),
             # 完整农历（八月初三）：格子里放不下，供悬停提示用
             "lunar_full": lunar_full(iso),
-            # 农历传统节日（元宵/七夕/腊八…）与二十四节气：格子里跟在农历后面显示
+            # 农历传统节日（元宵/七夕/腊八…）与二十四节气：格子里顶替农历日显示
             "fest": lunar_festival(iso),
             "term": solar_term(iso),
         })
+
+    # 兜底：某个假期在**本月内**一天"正日子"都没命中（数据异常、或正日子落在邻月），
+    # 就让它在月内的第一天显示名字 —— 总比整个假期一个名字都没有好认。
+    anchored = set(i["name"] for i in items if i["fest_day"])
+    for i in items:
+        if i["status"] == HOLIDAY and i["name"] and i["name"] not in anchored:
+            i["fest_day"] = True
+            anchored.add(i["name"])
 
     # 月份概览：本月节假日 / 调休 数量与跨度（跨月假日两侧都只算本月的天数）
     overview = {

@@ -265,6 +265,65 @@ class LunarFestivalTest(unittest.TestCase):
         self.assertEqual(mar[20]["fest"], "龙抬头")
 
 
+class FestivalDayTest(unittest.TestCase):
+    """法定假期名只在"正日子"当天进格子（中秋三天不都写"中秋节"）。"""
+
+    def test_solar_festivals_only_on_the_day(self):
+        self.assertTrue(model.is_festival_day("2026-01-01", "元旦"))
+        self.assertFalse(model.is_festival_day("2026-01-02", "元旦"))
+        self.assertTrue(model.is_festival_day("2026-10-01", "国庆节"))
+        self.assertFalse(model.is_festival_day("2026-10-03", "国庆节"))
+        self.assertTrue(model.is_festival_day("2026-05-01", "劳动节"))
+        self.assertFalse(model.is_festival_day("2026-05-05", "劳动节"))
+
+    def test_lunar_festivals_only_on_the_day(self):
+        self.assertTrue(model.is_festival_day("2026-09-25", "中秋节"))
+        self.assertFalse(model.is_festival_day("2026-09-26", "中秋节"))
+        self.assertFalse(model.is_festival_day("2026-09-27", "中秋节"))
+        self.assertTrue(model.is_festival_day("2026-06-19", "端午节"))
+        self.assertFalse(model.is_festival_day("2026-06-20", "端午节"))
+
+    def test_spring_festival_anchors_on_lunar_new_year(self):
+        # 正月初一才是"春节"；除夕和假期其余各天都不算
+        self.assertTrue(model.is_festival_day("2026-02-17", "春节"))
+        for day in ("2026-02-15", "2026-02-16", "2026-02-18", "2026-02-23"):
+            self.assertFalse(model.is_festival_day(day, "春节"), day)
+
+    def test_solar_term_named_festival_uses_term_day(self):
+        # 清明节 = 清明节气当天（2026-04-05）；假期首日 4/4 不算
+        self.assertTrue(model.is_festival_day("2026-04-05", "清明节"))
+        self.assertFalse(model.is_festival_day("2026-04-04", "清明节"))
+
+    def test_bad_input(self):
+        self.assertFalse(model.is_festival_day("abc", "元旦"))
+        self.assertFalse(model.is_festival_day("2026-01-01", ""))
+        self.assertFalse(model.is_festival_day("2026-01-01", None))
+
+    def test_month_view_marks_only_the_day(self):
+        v = model.month_view(2026, 9, today="2026-09-14")
+        got = {i["date"]: i["fest_day"] for i in v["items"] if i["status"] == "holiday"}
+        self.assertEqual(got, {"2026-09-25": True,
+                               "2026-09-26": False,
+                               "2026-09-27": False})
+        # 名字本身仍带着（供悬停提示说明"这几天是中秋假期"）
+        names = set(i["name"] for i in v["items"] if i["status"] == "holiday")
+        self.assertEqual(names, {"中秋节"})
+
+    def test_month_view_fest_day_false_for_non_holidays(self):
+        v = model.month_view(2026, 10, today="2026-09-14")
+        self.assertFalse(any(i["fest_day"] for i in v["items"]
+                             if i["status"] != "holiday"))
+
+    def test_fallback_when_anchor_missing(self):
+        # 罕见情况：假期里没有一天能对上节日（数据缺失 / 正日子落在邻月）→
+        # 让月内第一天显示名字，总比整个假期一个名字都没有
+        years = {"2026": {"holidays": {"国庆节": ["2026-08-30", "2026-08-31"]},
+                          "workdays": []}}
+        v = model.month_view(2026, 8, today="2026-09-14", years=years)
+        got = {i["date"]: i["fest_day"] for i in v["items"] if i["status"] == "holiday"}
+        self.assertEqual(got, {"2026-08-30": True, "2026-08-31": False})
+
+
 class OverviewTest(unittest.TestCase):
     """月份概览（节假日 / 调休 数量与跨度）。"""
 

@@ -1109,7 +1109,7 @@ mark.hit {
 
 .cal-num { font-size: 16px; font-weight: 600; color: var(--text); }
 .cal-lunar {
-  font-size: 10px;              /* 农历后面可能还跟着节日/节气（「初三 · 立秋」），略缩以放得下 */
+  font-size: 10px;              /* 这一行可能是农历（初二），也可能是顶替它的节气/节日（「龙抬头」） */
   color: var(--text-dim);
   line-height: 1;
   text-align: center;
