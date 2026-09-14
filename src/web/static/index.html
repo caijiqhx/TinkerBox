@@ -50,6 +50,10 @@
 
 <div id="toast" class="toast"></div>
 
+<!-- 自绘提示层：app.js 接管元素的 title 属性后，用它来显示悬停提示。
+     原生 tooltip 由系统绘制、跟不了页面主题（详见 app.js 的 TIP_OPTIONS）。 -->
+<div id="tip" class="tip hidden" role="tooltip"></div>
+
 <div id="modal" class="modal hidden">
   <div class="modal-box">
     <div class="modal-head">

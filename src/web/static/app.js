@@ -131,6 +131,126 @@
     if (resolve) { resolve(result); }
   }
 
+  /* ================= 自绘提示：接管 title =================
+
+     原生 tooltip 由系统/浏览器绘制：页面切深色它仍是系统色（跟不了主题），
+     还有 0.5~1 秒延迟、位置固定在指针右下（靠窗口右边会被裁）、
+     在 --app 窗口里显示为系统气泡，且样式完全改不了（title 没有 CSS 接口）。
+
+     做法：在 document 上做事件委托 —— 指针进入带 title 的元素时把文本取走、
+     摘掉 title（不摘浏览器照样弹原生框），改用这层自绘提示显示。
+     好处：工具模块一行都不用改，**以后新写的 title 也自动生效**。
+
+     TIP_OPTIONS 是程序内开关（不进 config.json、也不做界面开关），方便按需调整：
+     enabled 设 false 即可整体退回浏览器原生提示。 */
+  var TIP_OPTIONS = {
+    enabled: true,   /* 总开关：false = 完全用回浏览器原生 tooltip */
+    delay: 350,      /* 悬停多久才浮现（ms）；原生框也有延迟，太快会"扫过一排疯狂闪现" */
+    gap: 8,          /* 提示与元素之间的间距（px） */
+    edge: 6          /* 与视口边缘至少留出的距离（px） */
+  };
+
+  var tipNode = null, tipTimer = null, tipOwner = null;
+
+  function initTooltip() {
+    if (!TIP_OPTIONS.enabled) { return; }   /* 关掉时完全不接管，title 原样交给浏览器 */
+    tipNode = document.getElementById("tip");
+    if (!tipNode) { return; }
+
+    document.addEventListener("mouseover", onTipEnter, true);
+    document.addEventListener("mouseout", onTipLeave, true);
+    document.addEventListener("focusin", onTipEnter, true);
+    document.addEventListener("focusout", onTipLeave, true);
+    document.addEventListener("click", hideTip, true);
+    document.addEventListener("scroll", hideTip, true);   /* 捕获：也能收到内层滚动容器 */
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") { hideTip(); }
+    });
+  }
+
+  /* 原生 tooltip 会向上找最近的带 title 的祖先元素 —— 这里保持同样口径，
+     否则"行里的小图标没 title、行本身有"时会读不到。 */
+  function tipHost(node) {
+    var depth = 0;
+    while (node && node.nodeType === 1 && depth < 8) {
+      if (node.getAttribute("title") || node.getAttribute("data-tip")) { return node; }
+      node = node.parentNode;
+      depth += 1;
+    }
+    return null;
+  }
+
+  /* 取走文本：摘掉 title（否则原生框照弹）、留一份到 data-tip（下次直接用），
+     并把内容补进 aria-label —— 纯图标按钮的唯一说明就是它。 */
+  function takeTipText(host) {
+    var text = host.getAttribute("title");
+    if (text) {
+      host.setAttribute("data-tip", text);
+      host.removeAttribute("title");
+      if (!host.getAttribute("aria-label")) {
+        host.setAttribute("aria-label", text);
+      }
+      return text;
+    }
+    return host.getAttribute("data-tip") || "";
+  }
+
+  function onTipEnter(event) {
+    var host = tipHost(event.target);
+    if (!host || host === tipOwner) { return; }   /* 在同一元素内部移动，不重来 */
+    var text = takeTipText(host);
+    if (!text) { return; }
+    tipOwner = host;
+    if (tipTimer) { clearTimeout(tipTimer); }
+    tipTimer = setTimeout(function () {
+      tipTimer = null;
+      showTip(host, text);
+    }, TIP_OPTIONS.delay);
+  }
+
+  /* 指针仍在同一元素（含其子元素）内时不隐藏，否则行内小图标之间移动会闪 */
+  function onTipLeave(event) {
+    if (!tipOwner) { return; }
+    var to = event.relatedTarget;
+    if (to && tipOwner.contains && tipOwner.contains(to)) { return; }
+    hideTip();
+  }
+
+  function hideTip() {
+    if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
+    tipOwner = null;
+    if (tipNode) {
+      tipNode.textContent = "";
+      tipNode.className = "tip hidden";
+    }
+  }
+
+  function showTip(host, text) {
+    if (!host || host !== tipOwner || !tipNode) { return; }
+    tipNode.textContent = text;
+    tipNode.className = "tip";
+    if (!host.getBoundingClientRect) { return; }   /* DOM 桩环境：不定位，退化为居中默认 */
+
+    var box = host.getBoundingClientRect();
+    var w = tipNode.offsetWidth || 0;
+    var h = tipNode.offsetHeight || 0;
+    var vw = window.innerWidth || 0;
+    var vh = window.innerHeight || 0;
+
+    /* 默认在元素下方居中；下面放不下就翻到上方；左右再夹进视口 */
+    var left = box.left + box.width / 2 - w / 2;
+    var top = box.bottom + TIP_OPTIONS.gap;
+    if (vh && top + h > vh - TIP_OPTIONS.edge) {
+      top = box.top - h - TIP_OPTIONS.gap;
+    }
+    if (vw && left + w > vw - TIP_OPTIONS.edge) { left = vw - w - TIP_OPTIONS.edge; }
+    if (left < TIP_OPTIONS.edge) { left = TIP_OPTIONS.edge; }
+    if (top < TIP_OPTIONS.edge) { top = TIP_OPTIONS.edge; }
+
+    tipNode.style.left = Math.round(left) + "px";
+    tipNode.style.top = Math.round(top) + "px";
+  }
+
   /* ================= API ================= */
 
   function request(method, path, payload) {
@@ -350,10 +470,17 @@
     apiGet("/api/status").then(function (data) {
       if (!node) { return; }
       node.textContent = "服务运行中 · 端口 " + data.port + " · " + humanDuration(data.uptime);
-      node.title = "启动于 " + (data.started || "-")
+      var detail = "启动于 " + (data.started || "-")
         + (data.keep_alive
             ? "\n常驻模式：关掉窗口后服务会继续留在后台"
             : "\n跟随窗口：关掉窗口即退出");
+      /* 提示层接管过这个元素后（有 data-tip），就写回 data-tip —— 否则每分钟
+         重新塞回 title，恰好悬停时会让浏览器漏出一次原生提示框 */
+      if (node.getAttribute("data-tip") !== null) {
+        node.setAttribute("data-tip", detail);
+      } else {
+        node.title = detail;
+      }
     }).catch(function () {
       if (node) { node.textContent = "服务状态未知"; }
     });
@@ -491,6 +618,7 @@
     window.addEventListener("beforeunload", sayGoodbye);
 
     initTheme();
+    initTooltip();          /* 接管 title，换成跟主题一致的自绘提示（开关见 TIP_OPTIONS） */
     refreshStatus();
     setInterval(refreshStatus, 60000);
 

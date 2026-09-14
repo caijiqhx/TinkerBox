@@ -452,6 +452,31 @@ body {
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.error { background: var(--danger); color: #fff; }
 
+/* 自绘提示（接管 title，见 app.js 的 TIP_OPTIONS）。
+   position: fixed 走视口坐标定位，与页面滚动无关；
+   pointer-events: none 很关键 —— 否则提示会挡住鼠标，触发 mouseout 造成闪烁。 */
+.tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 55;
+  max-width: 300px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-line;      /* 支持多行提示（如侧栏状态那处带换行） */
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+
+:root[data-theme="dark"] .tip { background: var(--panel-2); }
+
+.tip.hidden { display: none; }
+
 .modal {
   position: fixed;
   inset: 0;
