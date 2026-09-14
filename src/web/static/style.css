@@ -1,7 +1,7 @@
 /* ToolBox 样式
  *
- * 主题：浅色以 Vue 官方文档的配色为基准（品牌绿 #42b883 + 深蓝 #35495e），
- *       深色沿用同一套绿的亮版（#42d392）。
+ * 主题：品牌绿 #42b883（浅色）/ #42d392（深色）不变；浅色的**底色用暖灰系**，
+ *       而不是冷白 —— 冷白又亮又干，大面积铺开久了眼睛累（文字色、阴影也跟着转暖）。
  *
  * 主题切换只认 <html data-theme="light|dark">；"跟随系统"在 index.html 的
  * 内联脚本里就被解析成实际值，因此这里不需要写媒体查询，也不会有闪烁。
@@ -10,17 +10,19 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --bg:           #f6f6f7;
-  --panel:        #fafafa;
-  --panel-2:      #f6f6f7;
-  --sidebar-bg:   #eef0f2;
-  --border:       #e2e2e3;
-  --border-soft:  #ebebec;
+  /* 浅色刻意做成"暖灰"而不是冷白：冷白又亮又干，大面积铺开久了眼睛累 */
+  --bg:           #efede7;
+  --panel:        #faf8f3;
+  --panel-2:      #efede7;
+  --sidebar-bg:   #e6e3da;
+  --border:       #dcd8ce;
+  --border-soft:  #e8e5dc;
 
-  --text:         #2c3e50;
-  --text-dim:     #5d6b7a;
-  --text-mute:    #8b97a3;
-  --heading:      #35495e;
+  /* 文字跟着背景转暖——冷蓝灰压在暖底上会显脏 */
+  --text:         #33312d;
+  --text-dim:     #5f5b54;
+  --text-mute:    #8b877e;
+  --heading:      #3b3833;
 
   --accent:       #42b883;
   --accent-hover: #369e6f;
@@ -42,8 +44,8 @@
   --adjust-bg-hover: #f0dfdc;
   --adjust-line:  #a94a41;
 
-  --shadow-sm:    0 1px 2px rgba(53, 73, 94, .06);
-  --shadow:       0 2px 6px rgba(53, 73, 94, .07), 0 8px 22px rgba(53, 73, 94, .06);
+  --shadow-sm:    0 1px 2px rgba(60, 55, 45, .06);
+  --shadow:       0 2px 6px rgba(60, 55, 45, .07), 0 8px 22px rgba(60, 55, 45, .06);
 
   --radius:       10px;
   --radius-sm:    7px;
