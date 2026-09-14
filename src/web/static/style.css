@@ -30,13 +30,16 @@
   --danger:       #d9534f;
   --warn:         #c98a17;
 
-  /* 日历：节假日 / 调休整块着色的底与描边（浅色 = 淡淡的红/橙底） */
-  --holiday-bg:   #fdeceb;
-  --holiday-bg-hover: #fbdcdb;
-  --holiday-line: #d9534f;
-  --adjust-bg:    #fdf3e0;
-  --adjust-bg-hover: #fbe8c4;
-  --adjust-line:  #c98a17;
+  /* 日历：节假日 / 调休整块着色的底、描边与文字色。
+     假期 = 蓝（休息），调休补班 = 红（提醒这天要上班，别记错） */
+  --holiday-fg:   #3a6fd8;
+  --holiday-bg:   #e9f0fc;
+  --holiday-bg-hover: #dbe6fa;
+  --holiday-line: #3a6fd8;
+  --adjust-fg:    #d9534f;
+  --adjust-bg:    #fdeceb;
+  --adjust-bg-hover: #fbdcdb;
+  --adjust-line:  #d9534f;
 
   --shadow-sm:    0 1px 2px rgba(53, 73, 94, .06);
   --shadow:       0 2px 6px rgba(53, 73, 94, .07), 0 8px 22px rgba(53, 73, 94, .06);
@@ -68,13 +71,15 @@
   --danger:       #e06a6a;
   --warn:         #d9a441;
 
-  /* 日历：深色主题用较淡的底 + 亮描边，保证深底上可读 */
-  --holiday-bg:   #3a1e1e;
-  --holiday-bg-hover: #462626;
-  --holiday-line: #e06a6a;
-  --adjust-bg:    #3a2c14;
-  --adjust-bg-hover: #473720;
-  --adjust-line:  #d9a441;
+  /* 日历：深色主题用较淡的底 + 亮描边，保证深底上可读（假期蓝 / 调休红） */
+  --holiday-fg:   #7aa7ee;
+  --holiday-bg:   #1b2740;
+  --holiday-bg-hover: #223052;
+  --holiday-line: #7aa7ee;
+  --adjust-fg:    #e06a6a;
+  --adjust-bg:    #3a1e1e;
+  --adjust-bg-hover: #462626;
+  --adjust-line:  #e06a6a;
 
   --shadow-sm:    0 1px 2px rgba(0, 0, 0, .3);
   --shadow:       0 2px 8px rgba(0, 0, 0, .35), 0 10px 26px rgba(0, 0, 0, .28);
@@ -1058,12 +1063,12 @@ mark.hit {
   line-height: 1.5;
 }
 .ov-chip.holiday {
-  color: var(--danger);
+  color: var(--holiday-fg);
   background: var(--holiday-bg);
   border-color: var(--holiday-line);
 }
 .ov-chip.adj {
-  color: var(--warn);
+  color: var(--adjust-fg);
   background: var(--adjust-bg);
   border-color: var(--adjust-line);
 }
@@ -1118,12 +1123,12 @@ mark.hit {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cal-name { font-size: 11.5px; color: var(--danger); line-height: 1; text-align: center; }
+.cal-name { font-size: 11.5px; color: var(--holiday-fg); line-height: 1; text-align: center; }
 .cal-adj {
   font-size: 11.5px;
   font-weight: 700;
   background: var(--adjust-bg);
-  color: var(--warn);
+  color: var(--adjust-fg);
   border: 1px solid var(--adjust-line);
   border-radius: 4px;
   padding: 0 5px;
@@ -1133,8 +1138,8 @@ mark.hit {
 
 /* 农历行里跟在后面的节日/节气：比农历的灰更实一点，否则小字容易看不见 */
 .cal-extra { color: var(--text); }
-.cal-cell.holiday .cal-extra { color: var(--danger); }
-.cal-cell.workday .cal-extra { color: var(--warn); }
+.cal-cell.holiday .cal-extra { color: var(--holiday-fg); }
+.cal-cell.workday .cal-extra { color: var(--adjust-fg); }
 
 /* 业务四态：节假日红 / 调休橙 / 周末灰 / 普通默认。
    节假日和调休都是整块着色（底 + 描边 + 文字同色系），一眼可辨。 */
@@ -1142,16 +1147,16 @@ mark.hit {
   background: var(--holiday-bg);
   border-color: var(--holiday-line);
 }
-.cal-cell.holiday .cal-num { color: var(--danger); }
-.cal-cell.holiday .cal-name { color: var(--danger); }
-.cal-cell.holiday .cal-lunar { color: var(--danger); opacity: .75; }
+.cal-cell.holiday .cal-num { color: var(--holiday-fg); }
+.cal-cell.holiday .cal-name { color: var(--holiday-fg); }
+.cal-cell.holiday .cal-lunar { color: var(--holiday-fg); opacity: .75; }
 
 .cal-cell.workday {
   background: var(--adjust-bg);
   border-color: var(--adjust-line);
 }
-.cal-cell.workday .cal-num { color: var(--warn); }
-.cal-cell.workday .cal-lunar { color: var(--warn); opacity: .75; }
+.cal-cell.workday .cal-num { color: var(--adjust-fg); }
+.cal-cell.workday .cal-lunar { color: var(--adjust-fg); opacity: .75; }
 
 .cal-cell.weekend .cal-num { color: var(--text-mute); }
 
@@ -1231,10 +1236,10 @@ mark.hit {
 .cal-due .due-done::before { border: 1.5px solid var(--text-mute); }
 
 /* 整块着色的假日/调休格子里，计数沿用同色系以保证可读 */
-.cal-cell.holiday .due-pending { color: var(--danger); }
-.cal-cell.holiday .due-pending::before { background: var(--danger); }
-.cal-cell.workday .due-pending { color: var(--warn); }
-.cal-cell.workday .due-pending::before { background: var(--warn); }
+.cal-cell.holiday .due-pending { color: var(--holiday-fg); }
+.cal-cell.holiday .due-pending::before { background: var(--holiday-fg); }
+.cal-cell.workday .due-pending { color: var(--adjust-fg); }
+.cal-cell.workday .due-pending::before { background: var(--adjust-fg); }
 
 .cal-legend {
   display: flex;
@@ -1250,8 +1255,8 @@ mark.hit {
   height: 10px;
   border-radius: 3px;
 }
-.lg-dot.holiday { background: var(--danger); }
-.lg-dot.adj { background: var(--warn); }
+.lg-dot.holiday { background: var(--holiday-fg); }
+.lg-dot.adj { background: var(--adjust-fg); }
 .lg-dot.weekend { background: var(--text-mute); }
 .lg-dot.today { box-shadow: inset 0 0 0 2px var(--accent); }
 .lg-dot.due {
