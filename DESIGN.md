@@ -2,7 +2,7 @@
 
 > 个人工具箱 · 本地 Web UI 承载 · 纯标准库 · 跨平台（Windows 开发 / aarch64 UOS 运行）
 >
-> **首版功能范围：仅 TodoList 一个工具。**
+> **当前工具：待办清单（TodoList）+ 日历（Calendar）** —— 首版从 TodoList 起步，架构保留多工具扩展能力。
 
 ---
 
@@ -11,7 +11,7 @@
 | 约束 | 内容 | 原因 |
 |---|---|---|
 | **运行环境** | 目标机为 aarch64 UOS，**仅能确定有 python3** | 环境无法预先探测 |
-| **功能范围** | **首版只做 TodoList**（架构保留多工具扩展能力） | 用户已收窄 |
+| **功能范围** | **当前：待办清单 + 日历**（首版只做 TodoList，架构保留多工具扩展能力） | 逐步增量，非一次性排期 |
 | **依赖策略** | **纯标准库**，零第三方依赖 | 引入 C 扩展库会把跨平台问题重新带回来 |
 | **语言版本** | 兼容 **Python 3.7**（目标机可能是 3.7.x） | 源码运行，版本由目标机决定 |
 | **交付形态** | 源码目录 + 启动脚本，**不打包** | 用户已确认接受源码运行 |
@@ -32,13 +32,14 @@
 |---|---|---|
 | 总体入口页 → 跳转工具页 | ✅ 完全胜任 | 网页导航是这个形态的天然强项 |
 | TodoList 增删改查 | ✅ 完全胜任 | 列表/表单/行内编辑都是 Web 常规能力 |
+| 日历（月历 / 节假日 / 农历） | ✅ 完全胜任 | 纯前端网格渲染，数据全部内置、离线可用 |
 | **中文输入** | ✅ **优于 Tkinter** | 走浏览器输入法，无需处理 XIM/fcitx |
 | 固定到桌面/启动器 | ✅ 胜任 | `.desktop` 图标 + `--app` 无地址栏窗口 |
 | 界面美观度 | ✅ 优于 Tkinter | HTML/CSS 表现力远超 Tk |
-| **系统原生文件对话框** | ⚠️ 需自建 | 首版 TodoList **用不到**，可推迟 |
+| **系统原生文件对话框** | ⚠️ 需自建 | 现有工具**用不到**，推迟到 filebatch |
 | 系统托盘常驻 | ❌ 不支持 | 若将来必需，才需要考虑 tkinter 承载层 |
 
-**结论**：TodoList 的全部需求 Web UI 均可覆盖，**GUI 承载层不做**。
+**结论**：现有工具（待办清单 / 日历）的全部需求 Web UI 均可覆盖，**GUI 承载层不做**。
 
 ### 入口页
 
@@ -58,7 +59,8 @@
                    │  JSON over HTTP (127.0.0.1 + token)
 ┌──────────────────▼──────────────────────────┐
 │  web/  承载层                                │
-│  server.py  router.py  launcher.py  doctor.py│
+│  server.py router.py instance.py launcher.py │
+│  doctor.py                                   │
 └──────────────────┬──────────────────────────┘
                    │  统一 action 分发（与协议无关）
 ┌──────────────────▼──────────────────────────┐
@@ -68,8 +70,9 @@
        │                           │
 ┌──────▼────────┐          ┌───────▼──────────┐
 │  services/    │          │  tools/          │
-│  配置 存储 任务 │          │  todo            │
-│ 日志 平台差异  │          │                  │
+│ 配置 存储 日志 │          │  todo / calendar │
+│  平台差异      │          │  （各自 model+   │
+│               │          │   tool，互不依赖）│
 └───────────────┘          └──────────────────┘
 ```
 
@@ -87,19 +90,21 @@
 ToolBox/
 ├─ DESIGN.md
 ├─ README.md
+├─ .gitattributes            # 行尾固化（*.bat / *.vbs = CRLF）
 ├─ run.sh                    # Linux 启动脚本
 ├─ run.bat                   # Windows 启动脚本
+├─ run-silent.vbs            # Windows 静默启动（无窗口、无浏览器，失败才提示）
 ├─ src/
-│  ├─ main.py                # 唯一入口
+│  ├─ main.py                # 唯一入口（含 --detach / stop / status 等子命令）
 │  ├─ core/
 │  │  ├─ __init__.py
-│  │  ├─ tool.py             # Tool 基类 + ToolMeta
+│  │  ├─ tool.py             # Tool 基类 + ToolMeta（含 icon_html 内联 SVG）
 │  │  ├─ registry.py         # 工具注册表
 │  │  ├─ errors.py           # ToolError / 统一错误
-│  │  └─ paths.py            # 跨平台路径（配置/数据目录）
+│  │  └─ paths.py            # 跨平台路径（配置/数据目录，支持 TOOLBOX_DATA_DIR 覆盖）
 │  ├─ services/
 │  │  ├─ __init__.py
-│  │  ├─ jsonio.py           # 原子 JSON 读写
+│  │  ├─ jsonio.py           # 原子 JSON 读写 + 备份轮转
 │  │  ├─ config.py           # 全局配置
 │  │  ├─ logs.py             # 日志
 │  │  └─ platform.py         # 平台差异【全项目唯一允许平台分支处】
@@ -107,6 +112,7 @@ ToolBox/
 │  │  ├─ __init__.py
 │  │  ├─ server.py           # ThreadingHTTPServer 封装
 │  │  ├─ router.py           # 路由 + action 分发 + token 校验
+│  │  ├─ instance.py         # 常驻实例探测（幂等启动 / stop / status）
 │  │  ├─ launcher.py         # 浏览器探测与 --app 启动
 │  │  ├─ doctor.py           # 环境自检报告
 │  │  └─ static/
@@ -114,19 +120,24 @@ ToolBox/
 │  │     ├─ app.js
 │  │     ├─ style.css
 │  │     └─ tools/
-│  │        └─ todo.js       # TodoList 前端模块
+│  │        ├─ todo.js       # 待办清单前端模块
+│  │        └─ calendar.js   # 日历前端模块
 │  ├─ cli/
 │  │  └─ cli.py              # CLI 承载层（保底，100% 可用）
 │  └─ tools/
-│     ├─ __init__.py         # 注册工具（目前只有 todo）
-│     └─ todo/
+│     ├─ __init__.py         # register_all()：注册全部工具
+│     ├─ todo/
+│     │  ├─ __init__.py
+│     │  ├─ model.py         # Task 数据结构 + 视图/日期口径
+│     │  ├─ store.py         # data/todo.json 原子读写（含回收站）
+│     │  └─ tool.py          # Tool 实现（actions + cli）
+│     └─ calendar/
 │        ├─ __init__.py
-│        ├─ model.py         # Task 数据结构
-│        ├─ store.py         # data/todo.json 原子读写
-│        └─ tool.py          # Tool 实现（actions + cli）
+│        ├─ model.py         # 月视图 / 农历（1900-2100）/ 节假日状态
+│        ├─ tool.py          # Tool 实现（actions；无 CLI）
+│        └─ holidays.json    # 内置节假日数据（离线可用）
 ├─ data/                     # 运行时数据（配置、todo.json、日志）
-├─ tests/
-└─ assets/                   # 图标（.ico / .png）
+└─ tests/                    # test_todo / test_calendar / test_core / test_instance
 ```
 
 `services/tasks.py`（后台长任务）首版**不实现** —— TodoList 无耗时操作。等将来做文件批处理时再加。
@@ -180,7 +191,8 @@ def get(tid): ...
 ### 5.1 服务
 
 - `http.server.ThreadingHTTPServer` + 自定义 `BaseHTTPRequestHandler`
-- **绑定 `127.0.0.1`，端口传 `0` 让系统动态分配**（避免冲突、避免局域网暴露），启动后读回实际端口
+- **只绑定 `127.0.0.1`**；端口**固定 8765** —— 用户靠浏览器书签进来，随机端口会让书签失效。
+  被占用时**明确报错，绝不静默换端口**（静默换掉只会让书签悄悄失效、用户还不知道为什么）
 - 全部 API 走 JSON，响应统一包装：`{"ok": true, "data": ...}` / `{"ok": false, "error": "..."}`
 
 ### 5.2 路由
@@ -188,12 +200,16 @@ def get(tid): ...
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/` | 返回 `index.html`（注入 token） |
-| GET | `/static/<path>` | 静态资源（限白名单，防目录穿越） |
-| GET | `/api/tools` | 工具清单（id/name/desc/icon），供导航 / 入口页渲染 |
+| GET | `/static/<path>` | 静态资源（限白名单，防目录穿越；`Cache-Control: no-store`） |
+| GET | `/api/tools` | 工具清单（id/name/desc/icon/icon_html），供导航 / 入口页渲染 |
 | POST | `/api/tool/<tid>/<action>` | body: `{"payload": {...}}` → 分发到 `tools.get(tid).actions()[action]` |
 | GET | `/api/doctor` | 环境自检报告 |
-| POST | `/api/ping` | 前端心跳，用于「关窗口即退出」 |
-| POST | `/api/quit` | 主动退出 |
+| POST | `/api/ping` | 前端心跳（活动时间统计；常驻模式下不因此退出） |
+| GET | `/api/identity` | **免 token** 的只读探测：确认"是不是我自己的服务"（幂等启动用） |
+| POST | `/api/shutdown?i=<instance>` | 供 `stop` 子命令关闭服务（进程外拿不到页面 token，改用实例标识校验） |
+| GET | `/api/status` | 运行时长 / 端口 / 是否常驻（侧栏小字用，带 token） |
+| POST | `/api/quit` | 页面「关闭服务」按钮 |
+| POST | `/api/bye` | 窗口关闭信号（`sendBeacon`，走 `?t=` 查询参数传 token）；**常驻模式下不关服务** |
 
 ### 5.3 安全（必做，不是可选项）
 
@@ -207,11 +223,16 @@ def get(tid): ...
 
 ### 5.4 生命周期
 
-- **启动**：起服务 → 探测浏览器 → 用 `--app` 打开 → 主线程等待退出信号
-- **退出**（两条并行）
-  - 前端每 3 秒 `POST /api/ping`；服务端超过 10 秒未收到心跳 → 自动 shutdown（**关掉 `--app` 窗口即退，体验贴近原生应用**）
-  - 页面提供「退出」按钮 → `POST /api/quit`
-- **残留进程**：`KeyboardInterrupt` / `SIGTERM` 均走统一清理，避免端口与进程残留
+**服务寿命与窗口寿命解耦** —— 用户日常只做一个动作：**点一次 run，当天一直驻留**。
+
+- **启动（幂等）**：先探测是否已有自有实例在跑（读 `data/server.json` + 请求 `/api/identity` 确认身份）；
+  有则**只打开界面、不重复起服务**；没有才拉起服务
+- **服务跑在分离进程里**（`--detach`）：Windows 用 `DETACHED_PROCESS` + `pythonw.exe`，POSIX 用
+  `start_new_session`。否则**关掉启动脚本的黑窗会连带杀掉服务**，常驻就无从谈起
+- **三个人工/自动出口**：界面「关闭服务」/ 命令行 `stop` / **空闲 12 小时自动退出**
+- **关窗口 ≠ 退出服务**：前端 `pagehide` 发 `/api/bye`，但**是否因此退出由服务端按 `keep_alive` 判断**
+  （`keep_alive=false` 可回退到"关窗口即退"）
+- 心跳间隔 15 秒、超时 90 秒（必须大于浏览器对后台标签的节流周期，否则窗口一最小化就被误杀）
 
 ### 5.5 浏览器探测与 `--app` 启动（launcher.py）
 
@@ -228,16 +249,23 @@ def get(tid): ...
 
 **无图形环境判断**：`DISPLAY` 与 `WAYLAND_DISPLAY` 均未设置 → 不起浏览器，提示改用 CLI 或 `--no-browser`。
 
+**默认不自动打开浏览器**（与直觉相反，但实战结论）：用户日常的主路径其实是**点浏览器书签**，
+启动脚本只负责把服务拉起来。所以"打开浏览器"做成**显式开关 `--open`**，默认只打印地址；
+`--no-browser` 保留为语义明确的显式否定，优先级高于 `--open`。
+
 ### 5.6 前端（static/，无框架手写）
 
-- `index.html`：入口页容器 + 左侧导航容器 + 右侧内容容器
+- `index.html`：外壳容器（侧栏 + 内容区 + 弹窗 + 确认框），启动时由服务端注入 token 与主题偏好
 - `app.js`
-  - 启动时 `GET /api/tools` 渲染导航；按"工具数 > 1"规则决定是否显示入口页
-  - hash 路由 `#/todo`，切换时调用对应工具模块的 `render(container, api)`
-  - `api` 对象封装 `fetch`：自动带 token、自动解包 `{ok,data,error}`、统一错误提示
-  - 心跳定时器
-- `tools/todo.js`：导出 `render(container, api)`；只调 action，不写业务规则
-- `style.css`：手写 CSS 变量做主题，深浅色可选
+  - `GET /api/tools` 渲染侧栏导航与入口页卡片（工具图标优先用 `icon_html` 内联 SVG，回退文本 `icon`）
+  - hash 路由：`#/<工具 id>`；**路由解析只认路径部分**，`?` 后的参数（如 `#/todo?due=...`）由各工具自行读取
+  - 统一封装 `callTool(tool, action, payload)` / `apiGet` / `apiPost`：自动带 token、自动解包
+    `{ok,data,error}`、统一错误提示
+  - 对外提供 `ctx`（`el` / `callTool` / `toast` / `confirm` / `openModal` / `clear` / `dialogOpen` …）
+  - 主题三态（浅色 / 深色 / 跟随系统）；侧栏底部显示服务状态小字
+- `tools/todo.js`、`tools/calendar.js`：各自 IIFE，导出 `window.ToolBox.registerTool(id, {render})`；
+  **只调 action，不写业务规则**；跨工具联动也是调对方的 action（如日历调 `todo.due_map`）
+- `style.css`：手写 CSS 变量做主题（`:root[data-theme=...]`），深浅两套
 
 ---
 
@@ -245,9 +273,9 @@ def get(tid): ...
 
 | 模块 | 职责 | 关键点 |
 |---|---|---|
-| `jsonio.py` | JSON 原子读写 | 写临时文件 → `os.replace()` 覆盖；读失败给默认值，不崩 |
-| `config.py` | 全局配置 | 存 `data/config.json`；`get/set` 与默认值合并 |
-| `logs.py` | 日志 | 写 `data/logs/`，按日切分；UI 异常单独记录 |
+| `jsonio.py` | JSON 原子读写 + 备份轮转 | 写临时文件 → `os.fsync` → `os.replace()`；**写前先把旧版轮转成 `.bak.N`**；读失败给默认值，不崩 |
+| `config.py` | 全局配置 | 存 `data/config.json`；`get/set` 与默认值合并。已有：`port` / `keep_alive` / `idle_exit_hours` / `backup_keep` / `trash_keep_days` |
+| `logs.py` | 日志 | 写 `data/logs/`，按日切分；UI 异常单独记录；后台服务输出落 `data/logs/service.out` |
 | `platform.py` | 平台差异**唯一出口** | 见下 |
 
 **`platform.py` 是全项目唯一允许出现平台分支的地方**：
@@ -255,24 +283,30 @@ def get(tid): ...
 ```python
 IS_WINDOWS = os.name == "nt"
 
-def browser_candidates():   # 浏览器候选列表（按平台返回，Chromium 内核优先）
-def has_display():          # 是否有图形环境
-def is_case_sensitive():    # Windows 不区分大小写；Linux 区分（为将来 filebatch 预留）
+def browser_candidates():     # 浏览器候选列表（按平台返回，Chromium 内核优先）
+def has_display():            # 是否有图形环境
+def is_case_sensitive():      # Windows 不区分大小写；Linux 区分（为将来 filebatch 预留）
+def allow_address_reuse():    # Windows 必须返回 False（否则两个进程能绑同一端口）
+def spawn_background(...)     # 分离进程启动（DETACHED_PROCESS / start_new_session）
+def background_python():      # Windows 优先 pythonw.exe（GUI 子系统，不附着控制台）
 def open_in_file_manager(path)
 ```
 
-数据目录的选址（项目内 `data/` 优先，不可写时退回用户目录）放在 `core/paths.py`，与平台行为分开。
+数据目录的选址（项目内 `data/` 优先，不可写时退回用户目录；`TOOLBOX_DATA_DIR` 可整体覆盖）放在 `core/paths.py`，与平台行为分开。
 
 ---
 
 ## 7. 入口设计（main.py）
 
 ```bash
-python3 src/main.py                     # 默认：起服务（不弹浏览器窗口，用书签访问）
+python3 src/main.py                     # 默认：起服务（不弹浏览器窗口，用书签访问）；已是常驻则只开界面
 python3 src/main.py --open              # 起服务并自动打开浏览器窗口
 python3 src/main.py --ui=cli            # 强制 CLI（TOOLBOX_UI=cli 亦可）
 python3 src/main.py --ui=none --port=8765   # 只起服务，不开浏览器
 python3 src/main.py --no-browser        # 强制不打开浏览器（优先级高于 --open）
+python3 src/main.py --detach            # 分离进程启动（拉起后台服务后前台立即退出，黑窗可关）
+python3 src/main.py status              # 查看服务是否在跑（端口 / 运行时长）
+python3 src/main.py stop                # 关闭正在跑的服务
 python3 src/main.py doctor              # 环境自检并打印报告
 python3 src/main.py todo list           # 直接调工具的 CLI 子命令
 python3 src/main.py todo add "买牛奶"
@@ -287,28 +321,38 @@ python3 src/main.py todo add "买牛奶"
 
 ---
 
-## 8. TodoList 设计
+## 8. 工具设计
+
+> 8.1–8.5 描述 **TodoList**（第一个、也是最完整的工具）；8.6 简述**日历**。
 
 ### 8.1 数据模型
 
 任务直接用**普通 dict**表示（不用 dataclass）——它与 JSON 天然同构，省掉一层序列化往返，读写不易出错：
 
 ```python
-# tools/todo/model.py
+# tools/todo/model.py  make_task() 的产物（字段与实际实现一致）
 {
-    "id":       "a1b2c3d4e5f6",   # uuid4 前 12 位
-    "title":    "买牛奶",
-    "status":   "todo",            # todo | doing | done
-    "priority": 0,                 # 0 普通 / 1 重要 / 2 紧急
-    "tags":     [],                # 字符串列表
-    "note":     "",
-    "created":  "2026-09-11 21:50:00",
-    "updated":  "2026-09-11 21:50:00",
-    "done_at":  "",                # 空串表示未完成
+    "id":         "a1b2c3d4e5f6",   # uuid4 前 12 位
+    "list_id":    "default",         # 所属清单；default = 兜底清单「未分类」
+    "title":      "买牛奶",
+    "status":     "todo",            # todo | done
+    "important":  False,             # 星标（重要视图）
+    "my_day":     "",                # 加入「我的一天」那天（YYYY-MM-DD）；空 = 未加入
+    "due":        "",                # 到期日（YYYY-MM-DD）；空 = 无
+    "repeat":     "none",            # none | daily | weekly | monthly
+    "note":       "",
+    "steps":      [],                # [{id, title, done}]，最多 50 步
+    "tags":       [],                # 字符串列表，最多 12 个
+    "created":    "2026-09-11 21:50:00",
+    "updated":    "2026-09-11 21:50:00",
+    "done_at":    "",                # 空串表示未完成
+    "deleted_at": "",                # 非空 = 在回收站（软删除，保留 30 天）
 }
 ```
 
-> 首版**不含到期日期与提醒**（用户已确认不做）；也**不做多清单**（暂用单列表 + 标签，多清单后续再说）。
+> 「我的一天」靠 `my_day <= 今天 且未完成` 判定（不是等于今天），所以**不需要任何后台定时任务**，
+> 昨天没做完的今天自动还在；重复任务完成时顺延，`my_day` 被推到下一周期、当天自然消失。
+> 手动排序键为 `(星标, order, 到期日, 创建)`；任务**不做**手动拖拽排序（与自动排序互斥）。
 
 ### 8.2 持久化
 
@@ -318,33 +362,63 @@ python3 src/main.py todo add "买牛奶"
 
 ### 8.3 actions
 
-| action | payload | 返回 |
+统一入口 `board`（读）+ 一组写动作。`board` 一次返回视图所需的全部数据，前端不做二次拼装。
+
+| action | payload | 说明 |
 |---|---|---|
-| `list` | `{"filter": "all\|todo\|doing\|done", "keyword": ""}` | `{"tasks": [...], "stats": {...}}` |
-| `add` | `{"title": "...", "priority": 0, "tags": []}` | 新建 Task |
-| `update` | `{"id": "...", "fields": {...}}` | 更新后的 Task |
-| `toggle` | `{"id": "..."}` | 更新后的 Task |
-| `remove` | `{"id": "..."}` | `{"removed": "id"}` |
-| `stats` | `{}` | 各状态计数 |
+| `board` | `{view, list_id, keyword, due}` | 视图/筛选/分组/计数/统计一次给全。`view` ∈ all / my_day / important / planned / completed / list / trash / day |
+| `due_map` | `{year, month}`（可选） | 按到期日聚合 `{pending, done}`，供日历格子叠加显示 |
+| `add` | `{title, view, list_id, due, repeat}` | 在「我的一天 / 重要 / 已计划 / 某天待办」视图里添加会自动补齐对应字段 |
+| `update` | `{id, fields}` | 改标题 / 到期日 / 备注 / 标签 / 所属清单 / 重复 |
+| `toggle` | `{id}` | 切换完成态；重复任务完成即顺延（返回 `deferred_to`） |
+| `toggle_important` / `toggle_my_day` | `{id}` | 星标 / 加入我的一天 |
+| `remove` / `clear_done` | `{id}` / `{}` | **软删除** → 进回收站 |
+| `bulk` | `{ids, op, value}` | 批量（设成指定值语义），一次读写 |
+| `add_step` / `toggle_step` / `update_step` / `remove_step` | `{id, ...}` | 步骤增删改 |
+| `add_list` / `rename_list` / `reorder_lists` / `remove_list` | `{...}` | 清单增删改与拖拽排序 |
+| `restore` / `purge` / `empty_trash` | `{id}` / `{}` | 回收站：恢复 / 彻底删 / 清空 |
 
 ### 8.4 前端要点
 
-- 顶部输入框：**回车即添加**（最高频操作要最顺手）
-- 列表：复选框切换完成态 · 双击行内编辑 · 删除需一次确认
-- 分组：进行中 / 已完成；支持按优先级排序
-- 过滤：全部 / 未完成 / 已完成 + 关键词搜索
+- **顶部工具栏**（只创建一次，避免刷新时输入框失焦）：添加框（回车即加，按当前视图自动补齐字段）+ 全局搜索（命中标题/备注/标签/步骤，片段高亮）+「多选」
+- **左栏**：我的一天 / 重要 / 已计划 / 已完成 / 任务 + 清单（自定义 + 兜底的「未分类」），回收站沉底；
+  清单可**拖拽排序**、可**置顶/删除**、**点标题即可改名**
+- **列表**：行首勾选切换完成态（多选模式下换成"选择框"）；行内显示星标/☀/重复/步骤进度/到期日/标签 chip；
+  **点步骤文字直接改**；「已计划」按 已过期/今天/明天/本周/以后 分组
+- **某天待办**（从日历跳入的临时视图）：跨清单、含已完成，分「未完成 / 已完成」两组，每条标出来源清单
+- **详情面板**：标题 / 步骤 / 标记 / 到期日（快捷项「今天」「明天」）/ 备注 / 所属清单 / 重复；**Esc 收起**
+- **批量操作**：多选后标记完成 / 标为重要 / 加入我的一天 / 移到清单 / 删除，另有全选
+- **不调用浏览器原生弹窗**：确认框由外壳提供 `ctx.confirm`
 - **中文输入**：浏览器原生支持，无需额外处理
 
 ### 8.5 CLI
 
 ```bash
-python3 src/main.py todo list
-python3 src/main.py todo add "买牛奶"
-python3 src/main.py todo done <id>
+python3 src/main.py todo list              # 默认「我的一天」；-a 全部 -i 重要 -p 已计划 -d 已完成
+python3 src/main.py todo add "买牛奶" --due 2026-09-20
+python3 src/main.py todo done <id>         # undone <id> 同义
+python3 src/main.py todo star <id>         # 切换星标
+python3 src/main.py todo today <id>        # 加入 / 移出「我的一天」
 python3 src/main.py todo rm <id>
+python3 src/main.py todo clear             # 清理全部已完成
+python3 src/main.py todo where             # 显示数据文件位置
 ```
 
 作用有两个：① 图形环境不可用时的保底；② **在 Windows 上验证核心逻辑不需要开浏览器**，调试更快。
+（**日历工具不提供 CLI** —— 它本身就是纯展示。）
+
+### 8.6 日历工具（简述）
+
+与 TodoList 并列的第二个工具（`tools/calendar/`），同样是"只暴露 action"：
+
+- **数据全内置、彻底离线**：`holidays.json`（节假日 / 调休）+ 1900-2100 农历表。
+  内网机器换年份时，把新数据的 json 放进**数据目录**即可覆盖内置数据，**不用重装程序**
+- `month` action 返回整月网格（周一开头；每格带 状态[节假日/调休/周末/工作日] / 节日名 / 农历 / 是否今天）
+  和月份概览（本月节假日、调休天数与跨度）；**无数据的年份退化为纯公历**，不报错
+- **与待办联动**：前端调 `todo.due_map` 取当天待办数叠加到格子（未完成/已完成分开），
+  点某天跳 `#/todo?due=YYYY-MM-DD`（跨清单的「某天待办」视图）
+- 联动取数失败（如 todo 工具缺席）时**退化成纯日历**，不影响主功能
+- `year` action 目前未被前端使用（供将来做年度视图用）
 
 ---
 
@@ -433,6 +507,8 @@ Categories=Utility;
 3. 把目标改为 `pythonw.exe src\main.py`（去掉控制台黑窗）
 
 > `Exec=` 与 `Icon=` 必须写绝对路径。
+> 注：`assets/`（图标）目前**未入库**，需要时自行放置 `icon.ico`（Windows）/ `icon.png`（Linux）；
+> 不放也不影响功能，只是快捷方式用默认图标。
 
 ---
 
@@ -442,8 +518,11 @@ Categories=Utility;
 |---|---|
 | 浏览器不支持 `--app` | 降级为 `webbrowser.open`（有地址栏但可用）；再不行手开 URL |
 | 目标机无图形环境 | `doctor` 报告 + 自动建议 CLI 承载；TodoList 有完整 CLI 可用 |
-| 端口冲突 | 端口传 `0`，由系统分配 |
-| 服务进程残留 | 前端心跳超时自动退出 + 退出按钮 + `SIGTERM` 清理 |
+| 端口冲突 | **固定端口 + 明确报错**（绝不静默换端口，否则书签失效）；配合 `server.json` + `/api/identity` 做幂等启动 |
+| 关掉启动窗口把服务带走 | 服务跑在**分离进程**（`DETACHED_PROCESS` + `pythonw.exe` / `start_new_session`） |
+| 服务进程残留 | 空闲 12 小时自动退 + `stop` 子命令 + 界面「关闭服务」 |
+| Windows `SO_REUSEADDR` 让两个进程绑同一端口 | 平台判断，**Windows 关闭 `allow_reuse_address`**（否则"端口被占用"分支永不触发） |
+| 本机探测被 `http_proxy` 劫持 | `build_opener(ProxyHandler({}))` 显式绕过代理（内网机器常设代理） |
 | 本机 CSRF | token + Host/Origin 校验（见 5.3） |
 | 目标机 Python 版本过低 | 全局 3.7 兼容编码约定 + `doctor` 首行报告版本 |
 | 中文输入 | 走浏览器，无需处理（相对 Tkinter 是优势） |
@@ -451,6 +530,9 @@ Categories=Utility;
 ---
 
 ## 12. 开发里程碑
+
+> 下表是**首版立项时的计划**，仅作历史记录；后续功能（多清单 / 到期日 / 重复任务 / 回收站 /
+> 常驻服务 / 日历 / 日历联动等）都是在 M1–M4 之后增量做的，详见 §14 与 README。
 
 | 阶段 | 内容 | 验收标准 |
 |---|---|---|
@@ -479,12 +561,22 @@ Categories=Utility;
 
 ## 14. 已确认的范围决策
 
+> 下表是**当前实际状态**（含实现过程中变更的决策），不是首版立项时的样子。
+
 | 事项 | 决定 |
 |---|---|
 | 项目名 | **ToolBox** |
-| 首版功能范围 | **仅 TodoList**（保留注册表机制以便扩展） |
+| 现有工具 | **待办清单 + 日历**（保留注册表机制：加工具 = 新增 `tools/<name>/` + 注册一行） |
 | 入口页 | **始终显示**，不做自适应隐藏 |
-| 到期日期 / 提醒 | **不做**（避免引入后台定时任务） |
-| 多清单 / 分类 | **不做**，暂用单列表 + 标签；后续可考虑 |
+| 到期日 | **已实现**：`due` 字段 + 「已计划」视图 + 从日历跳入的「某天待办」。**系统提醒/通知不做**（避免引入后台定时任务） |
+| 多清单 / 分类 | **已实现**：自定义清单 + 拖拽排序 + 置顶；兜底清单「未分类」固定排最后 |
+| 重复任务 | **已实现**：每天 / 每周 / 每月，完成即**顺延**（同一张卡循环，不生成新卡）；自定义周期（每 2 天 / 每工作日）**暂缓** |
+| 我的一天 | **已实现**：`my_day <= 今天 且未完成` 即可见，昨天没做完的自动延续 |
+| 回收站 / 自动备份 | **已实现**：软删除 + 30 天回收站；写盘前备份轮转（防文件级损坏）。两者互补，都要有 |
+| 任务拖拽排序 | **不做**（与自动排序互斥，用户已否） |
+| 撤销（Undo） | **不做**（用户已否） |
+| 标签筛选 | **暂缓**（标签本身已支持，只是还没有"按标签过滤"的入口） |
 | 固定到桌面 | **做**，Windows 上先用 `.lnk` 验证，`.desktop` 模板一并入库 |
-| 文件/目录选择器 | 首版**不需要**（TodoList 用不到），推迟到 filebatch |
+| 系统托盘 / 开机自启 | **不做** |
+| 文件/目录选择器 | **不需要**（现有工具用不到），推迟到 filebatch |
+| 常驻服务 | 固定端口 + 幂等启动（点一次 run 当天一直驻留），空闲 12 小时自动退出 |
