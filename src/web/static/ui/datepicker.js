@@ -33,6 +33,12 @@
   /* 点"外部关闭"要分两趟：捕获阶段先记下"点是否落在浮层里"，冒泡阶段只看这条记录。
      原因——被点的节点可能在它自己的 click 处理里被替换掉，那时再 contains 就判错了。 */
   var insideClick = false;
+  /* 还要能认出"这次点击正是打开浮层的那一下"：点触发按钮时，捕获阶段浮层还没打开
+     （记不到 insideClick），等冒泡到 document 时它已经被打开了 —— 不放过的话，
+     刚打开就被自己的"点外部关闭"关掉（表现是点了没反应）。
+     用点击序号而不是 contains(anchor)：序号不受节点被替换影响，也不会误豁免程序化的 open。 */
+  var clickSeq = 0;
+  var openedAtSeq = -1;
   var wheelAt = 0;
 
   function isoOf(y, m, d) {
@@ -209,12 +215,16 @@
     state.open = false;
     state.anchor = null;
     state.onPick = null;
+    openedAtSeq = -1;
     if (box) { box.className = "dp hidden"; }
   }
 
   function open(options) {
     options = options || {};
     if (!box) { return; }
+    /* 再点一次同一个触发按钮 = 收起（浮层开着时它已被"点外部"放过，没有出口） */
+    if (state.open && state.anchor === options.anchor) { close(); return; }
+    openedAtSeq = clickSeq;                      /* 记下"是这一下点击打开的"，见 onDocClick */
     state.anchor = options.anchor || null;
     state.onPick = typeof options.onPick === "function" ? options.onPick : null;
     state.picked = String(options.value || "");
@@ -244,17 +254,16 @@
   }
 
   function onDocClickCapture(event) {
+    clickSeq += 1;
     if (!state.open) { insideClick = false; return; }
     var target = event.target;
     insideClick = !!(box && box.contains && box.contains(target));
-    if (!insideClick && state.anchor && state.anchor.contains && state.anchor.contains(target)) {
-      insideClick = true;                        /* 触发按钮自己的 toggle 负责开合，这里不抢 */
-    }
   }
 
   function onDocClick() {
     if (!state.open) { return; }
     if (insideClick) { insideClick = false; return; }
+    if (openedAtSeq === clickSeq) { return; }          /* 这一下就是打开它的那次点击，别自己关自己 */
     close();
   }
 
