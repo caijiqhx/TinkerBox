@@ -3,6 +3,7 @@
 
     python3 src/main.py                      起服务（默认不弹浏览器，用书签访问）
     python3 src/main.py --open               起服务并自动打开浏览器窗口
+    python3 src/main.py --restart            先停掉正在跑的服务再启动（改了后端代码 / 配置后用）
     python3 src/main.py doctor               环境自检
     python3 src/main.py help                 查看用法与工具列表
     python3 src/main.py todo add "买牛奶"     调用工具的 CLI 子命令
@@ -50,7 +51,7 @@ def parse_args(argv):
     """
     options = {"ui": None, "port": None, "host": "127.0.0.1",
                "browser": "", "no_browser": False, "open": False,
-               "force": False, "detach": False}
+               "force": False, "detach": False, "restart": False}
     rest = []
 
     index = 0
@@ -105,6 +106,13 @@ def parse_args(argv):
         if name == "--detach":
             # 后台分离启动：服务跑在独立进程里，关掉终端不会带走它
             options["detach"] = True
+            index += 1
+            continue
+
+        if name == "--restart":
+            # 先把自己家的服务停干净，再按原方式启动 —— 改完后端代码 / 改了配置后想让它生效时用。
+            # 与 --force 的区别：--force 是"无视已有实例、硬起一个新的"，端口固定时那样会撞端口。
+            options["restart"] = True
             index += 1
             continue
 
@@ -421,30 +429,47 @@ def cmd_status():
     return 0
 
 
-def cmd_stop():
+def stop_running_instance():
+    """停掉自己家的服务实例（`stop` 与 `--restart` 共用这一处）。
+
+    返回 (ok, message)：
+      - (True, None)         本来就没在运行（调用方可以直接启动）
+      - (True, "已停止…")     停掉了
+      - (False, "失败原因…")  没停掉 —— 调用方**不要**继续启动，否则会撞上端口占用
+    """
     from web import instance
 
     record, _identity = instance.find_running()
     if record is None:
-        _say("工具箱服务未在运行")
-        instance.clear_record()
-        return 1
+        instance.clear_record()              # 顺手清掉指向死进程的残留记录
+        return True, None
 
-    _say("正在关闭端口 %d 上的服务…" % (record["port"],))
+    pid = record.get("pid")
+    hint = "（可手动结束进程 pid %s）" % (pid,) if pid else ""
+
     if not instance.request_shutdown(record["port"], record["instance"]):
-        _say("[!] 关闭请求没有送达")
-        if record.get("pid"):
-            _say("    可以手动结束该进程：pid %s" % (record["pid"],))
-        return 1
+        return False, "关闭请求没有送达%s" % (hint,)
 
     if instance.wait_until_stopped(record["port"]):
         instance.clear_record()
+        return True, "已停止端口 %d 上的原有服务" % (record["port"],)
+
+    return False, "请求已发出，但服务仍在响应%s" % (hint,)
+
+
+def cmd_stop():
+    ok, message = stop_running_instance()
+
+    if message is None:
+        _say("工具箱服务未在运行")
+        return 1
+
+    if ok:
+        _say("%s" % (message,))
         _say("服务已关闭")
         return 0
 
-    _say("[!] 请求已发出，但服务仍在响应")
-    if record.get("pid"):
-        _say("    可手动结束该进程：pid %s" % (record["pid"],))
+    _say("[!] %s" % (message,))
     return 1
 
 
@@ -505,6 +530,17 @@ def main(argv=None):
         except KeyboardInterrupt:
             print("")
             return 130
+
+    # ---- 重启：先把自家实例停干净，再走正常启动 ----
+    # 端口是固定的，旧进程没让出端口就启动必然失败，所以停不掉时**直接停在这里报错**，
+    # 而不是硬着头皮往下走（那样看起来像"随机启动失败"）。
+    if options.get("restart"):
+        stopped, message = stop_running_instance()
+        if not stopped:
+            print("重启失败：%s" % (message,))
+            return 1
+        if message:
+            _say("%s，正在重新启动…" % (message,))
 
     # ---- 界面承载 ----
     ui = resolve_ui(options)

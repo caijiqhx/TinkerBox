@@ -105,6 +105,15 @@ run.bat --open          # Windows
 
 再次运行启动脚本**不会重复起服务**：它会先探测，发现已有实例就直接把地址打给你。
 
+**想让它重启**（改完后端代码 / 改了配置之后要让改动生效）：
+
+```
+run.bat --restart          # 或 ./run.sh --restart
+```
+
+它会先停掉正在跑的实例、**等它让出端口**再启动（端口固定，不等就会撞端口）—— 停不掉时会直接报错停下，不会硬着头皮启动造成"随机失败"。
+前端静态文件每次刷新都会重新读取（`no-store`），改了前端不必重启；后端代码已经加载进内存，只有换进程才生效。
+
 **黑窗可以直接关掉。** `run.bat` / `run.sh` 会把真正的服务放在一个**脱离终端的独立进程**里
 （Windows 上走 `pythonw`，不附着任何控制台），启动脚本本身跑完就退出 ——
 所以关掉那个终端窗口不会把服务带走。控制台里显示的启动结果只是反馈，
@@ -125,6 +134,7 @@ run.bat --open          # Windows
 ```bash
 python3 src/main.py                        # 起服务（默认不弹浏览器）
 python3 src/main.py --open                 # 起服务并自动打开浏览器窗口
+python3 src/main.py --restart              # 先停掉正在跑的服务，再启动（重启）
 python3 src/main.py status                 # 查看服务状态（端口、运行时长）
 python3 src/main.py stop                   # 关闭后台服务
 python3 src/main.py doctor                 # 环境自检（换机器后先跑这个）
