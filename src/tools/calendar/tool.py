@@ -5,7 +5,7 @@
 
 提供的 action：
 - month   {year, month}  返回某年某月的整月视图数据（含每天状态、节日名、今天）
-- year    {year}         返回某年全年的状态摘要（供统计等使用，暂未用）
+- year    {year}         返回某年 12 个月的月视图（前端的"年度视图"用）
 """
 
 from __future__ import annotations
