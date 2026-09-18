@@ -891,6 +891,14 @@ mark.hit {
   align-items: center;
 }
 
+/* 到期日下面那行"这天是什么日子"（假期 / 调休 / 农历节日 / 节气）。
+   没有特殊日子时它是空的，:empty 直接收起 —— 不占位、也不在 flex 里留出多余的缝隙 */
+.detail-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.detail-hint:empty { display: none; }
+
 .detail-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
 .toggle-btn {

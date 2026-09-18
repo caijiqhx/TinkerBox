@@ -659,6 +659,46 @@
     return el("span", { class: cls, text: dateLabel(task.due), title: task.due });
   }
 
+  /* 到期日下面那行"这天是什么日子"（假期 / 调休 / 农历节日 / 节气）。
+     数据与日历同源（calendar.month），口径不在这里重写；普通日子不显示，
+     日历工具不可用（或取不到那天）时也完全不打扰 —— 只是没有这一行。 */
+  function fillDueHint(date, node) {
+    var parts = String(date || "").split("-");
+    if (parts.length !== 3) { return; }
+    var year = parseInt(parts[0], 10), month = parseInt(parts[1], 10);
+    if (!year || !month) { return; }
+
+    ctx.callTool("calendar", "month", { year: year, month: month }).then(function (data) {
+      var items = (data && data.view && data.view.items) || [];
+      var item = null;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].date === date) { item = items[i]; break; }
+      }
+      if (!item) { return; }
+      var text = dueHintText(item);
+      if (text) { node.textContent = text; }
+    }).catch(function () { /* 日历不可用就不提示 */ });
+  }
+
+  /* 拼提示文本：只在"特殊日子"给内容，普通工作日返回空串（那行会被 CSS 收掉） */
+  function dueHintText(item) {
+    var bits = [];
+    if (item.status === "holiday" && item.name) { bits.push(item.name); }
+    else if (item.status === "workday") { bits.push("调休补班日"); }
+    if (item.fest && !hintCovered(bits, item.fest)) { bits.push(item.fest); }
+    if (item.term && !hintCovered(bits, item.term)) { bits.push(item.term); }
+    if (!bits.length) { return ""; }
+    if (item.lunar_full) { bits.push(item.lunar_full); }
+    return bits.join(" · ");
+  }
+
+  function hintCovered(bits, text) {
+    for (var i = 0; i < bits.length; i++) {
+      if (bits[i].indexOf(text) >= 0) { return true; }
+    }
+    return false;
+  }
+
   function progressChip(task) {
     var info = stepProgress(task);
     if (!info.total) { return null; }
@@ -1256,6 +1296,9 @@
     dueInput.addEventListener("change", function () {
       act("update", { id: task.id, fields: { due: dueInput.value } });
     });
+    /* 紧贴输入框下面那行"这天是什么日子"；没有特殊日子的日子它是空的（CSS :empty 收起） */
+    var dueHint = el("div", { class: "detail-hint" });
+    if (task.due) { fillDueHint(task.due, dueHint); }
     var dueLabel = el("div", { class: "detail-label" }, [el("span", { text: "到期日" })]);
     if (task.due) {
       dueLabel.appendChild(el("button", {
@@ -1286,6 +1329,7 @@
     detailBox.appendChild(el("div", { class: "detail-sec" }, [
       dueLabel,
       el("div", { class: "detail-row" }, [dueInput]),
+      dueHint,
       quick
     ]));
 
