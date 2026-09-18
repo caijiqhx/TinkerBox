@@ -68,7 +68,7 @@ class CalendarTool(Tool):
             if view is None:
                 continue
             months.append(view)
-        return {"year": year, "months": months}
+        return {"year": year, "ganzhi": model.ganzhi_of_year(year), "months": months}
 
     # ------------------------------------------------------------------
     # 命令行

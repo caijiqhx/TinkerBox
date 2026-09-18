@@ -23,7 +23,8 @@
                 pickerYear: 0,      /* 面板里正在浏览的年份（与日历当前显示的年份分开，互不影响） */
                 picked: "",         /* 被点选中的那一天（再点一次取消） */
                 mode: "month",      /* month=月视图 / year=年度视图 */
-                calYear: 0 };       /* 年度视图里正在看的那一年 */
+                calYear: 0,         /* 年度视图里正在看的那一年 */
+                yearGanzhi: "" };   /* 年度视图里那年的干支（如「丙午马年」） */
   var yearMonths = null;               /* calendar.year 的结果（12 个月视图），只在年度视图用 */
   var dueMap = {};                     /* date -> {pending, done}，来自 todo.due_map */
   var cellNodes = {};                  /* date -> 格子节点：切换选中时只改这一个节点的 class，不整月重绘 */
@@ -72,6 +73,9 @@
       onclick: function () { setPickerOpen(!state.pickerOpen); }
     });
 
+    /* 干支纪年 + 生肖（如「丙午马年」）。数据与口径都在后端（ganzhi_of_year），前端只负责显示 */
+    var ganzhi = el("span", { class: "cal-ganzhi", text: view.ganzhi || "" });
+
     var todayBtn = el("button", {
       class: "btn ghost",
       text: "今天",
@@ -91,7 +95,7 @@
     });
 
     var group = el("div", { class: "cal-head-group" }, [
-      prev, next, titleBtn, todayBtn, yearBtn
+      prev, next, titleBtn, ganzhi, todayBtn, yearBtn
     ]);
     headBox.appendChild(group);
   }
@@ -508,6 +512,7 @@
     ctx.callTool("calendar", "year", { year: year }).then(function (data) {
       if (state.mode !== "year") { return; }    /* 这中间已经切回月视图了 */
       state.calYear = (data && data.year) || year;
+      state.yearGanzhi = (data && data.ganzhi) || "";
       yearMonths = (data && data.months) || [];
       renderYearHead();
       renderYear();
@@ -530,7 +535,10 @@
       title: "下一年",
       onclick: function () { loadYear(state.calYear + 1); }
     });
-    var title = el("div", { class: "cal-title static", text: state.calYear + " 年" });
+    var title = el("div", {
+      class: "cal-title static",
+      text: state.calYear + " 年" + (state.yearGanzhi ? " · " + state.yearGanzhi : "")
+    });
     var thisYear = el("button", {
       class: "btn ghost",
       text: "今年",
@@ -639,6 +647,7 @@
     state.editingYear = false;
     state.mode = "month";            /* 每次进入工具都从月视图开始 */
     state.calYear = 0;
+    state.yearGanzhi = "";
     yearMonths = null;
 
     var shell = el("div", { class: "cal-shell" });

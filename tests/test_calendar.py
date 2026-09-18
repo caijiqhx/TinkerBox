@@ -492,6 +492,37 @@ class CrossYearDataTest(unittest.TestCase):
             self.assertEqual(model.day_status(day)["status"], model.ADJUST, day)
 
 
+class GanzhiTest(unittest.TestCase):
+    """干支纪年 + 生肖（纯计算）。对照万年历的已知年份。"""
+
+    def test_known_years(self):
+        cases = {
+            1900: "庚子鼠年", 1912: "壬子鼠年", 1949: "己丑牛年", 1984: "甲子鼠年",
+            2000: "庚辰龙年", 2008: "戊子鼠年", 2020: "庚子鼠年", 2023: "癸卯兔年",
+            2024: "甲辰龙年", 2025: "乙巳蛇年", 2026: "丙午马年", 2027: "丁未羊年",
+            2030: "庚戌狗年",
+        }
+        for year, want in cases.items():
+            self.assertEqual(model.ganzhi_of_year(year), want, year)
+
+    def test_sixty_year_cycle(self):
+        self.assertEqual(model.ganzhi_of_year(1984), model.ganzhi_of_year(2044))
+        self.assertEqual(model.ganzhi_of_year(2026), model.ganzhi_of_year(2086))
+
+    def test_forms_full_name(self):
+        got = model.ganzhi_of_year(2026)
+        self.assertEqual(len(got), 4)                 # 天干 + 地支 + 生肖 + 「年」
+        self.assertTrue(got.endswith("年"))
+
+    def test_bad_input(self):
+        for bad in ("abc", None, "", [], {}):
+            self.assertEqual(model.ganzhi_of_year(bad), "")
+
+    def test_month_view_carries_ganzhi(self):
+        self.assertEqual(model.month_view(2026, 9)["ganzhi"], "丙午马年")
+        self.assertEqual(model.month_view(1900, 1)["ganzhi"], "庚子鼠年")
+
+
 class CalendarToolTest(unittest.TestCase):
     def setUp(self):
         self.tool = tool.CalendarTool()
@@ -515,6 +546,7 @@ class CalendarToolTest(unittest.TestCase):
     def test_year_action(self):
         res = self.tool.call("year", {"year": 2026})
         self.assertEqual(res["year"], 2026)
+        self.assertEqual(res["ganzhi"], "丙午马年")
         self.assertEqual(len(res["months"]), 12)
 
     def test_year_action_defaults_to_today(self):

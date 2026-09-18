@@ -109,6 +109,26 @@ _LUNAR_MONTHS = ("", "正", "二", "三", "四", "五", "六", "七", "八", "�
 _LUNAR_DAY_TENS = ("初", "十", "廿", "卅")
 _LUNAR_DIGITS = ("日", "一", "二", "三", "四", "五", "六", "七", "八", "九")
 
+#: 干支纪年：十天干 / 十二地支 / 对应生肖
+_GAN = ("甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸")
+_ZHI = ("子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥")
+_ZODIAC = ("鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪")
+
+
+def ganzhi_of_year(lunar_year):
+    """农历年号 → 干支 + 生肖，如 2026 →「丙午马年」。
+
+    干支每 60 年一轮，公元 4 年是甲子年，所以序号 = (lunar_year - 4) % 60。
+    校验：1984 → 甲子（鼠）、2000 → 庚辰（龙）、2024 → 甲辰（龙）、2025 → 乙巳（蛇）。
+    """
+    try:
+        year = int(lunar_year)
+    except (TypeError, ValueError):
+        return ""
+    offset = (year - 4) % 60
+    return _GAN[offset % 10] + _ZHI[offset % 12] + _ZODIAC[offset % 12] + "年"
+
+
 
 def _leap_month(ly):
     """农历年份的闰月（0 表示无闰月）。"""
@@ -574,6 +594,9 @@ def month_view(year, month, today=None, years=None):
         "year": year,
         "month": month,
         "year_month": "%04d-%02d" % (year, month),
+        # 干支纪年 + 生肖（如「丙午马年」）。按公历年算 —— 即该年春节之后的干支，
+        # 这也是万年历上"某年是什么年"的通行口径（农历年内换年，见 README 说明）。
+        "ganzhi": ganzhi_of_year(year),
         "weekday0": first.weekday(),     # 0=周一
         "days": days_in_month,
         "today": today_text if today_text[:7] == ("%04d-%02d" % (year, month)) else None,
