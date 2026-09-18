@@ -1337,3 +1337,120 @@ mark.hit {
   .cal-shell { max-width: 100%; }
   .cal-cell { min-height: 44px; padding: 3px; }
 }
+
+/* ===================== 日期选择浮层（ui/datepicker.js）=====================
+   页内自绘，替代原生 <input type="date">：样式跟主题走、翻月由自己控、
+   点日期只"选中"、点「确定」才生效。
+   层级排在 tooltip(50) / toast(55) / 弹窗(60) 之下，不抢它们的位。 */
+.dp {
+  position: fixed;
+  z-index: 45;
+  width: 258px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  user-select: none;
+}
+.dp.hidden { display: none; }
+
+.dp-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.dp-title {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--heading);
+}
+.dp-nav {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.dp-nav:hover {
+  background: var(--panel-2);
+  border-color: var(--border);
+  color: var(--accent);
+}
+
+.dp-week,
+.dp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.dp-wd {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-mute);
+  padding: 3px 0;
+}
+
+.dp-day {
+  position: relative;
+  height: 30px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.dp-day:hover { background: var(--panel-2); border-color: var(--border); }
+.dp-day.out { visibility: hidden; cursor: default; }   /* 上下月补位：留位置但不显示 */
+.dp-day.holiday { background: var(--holiday-bg); color: var(--holiday-fg); }
+.dp-day.workday { background: var(--adjust-bg); color: var(--adjust-fg); }
+/* 今天：右上角一个小圆点，跟日历里那个标记一致 */
+.dp-day.today::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+/* 选中（还没确认）：放在最后，压过上面几种状态 */
+.dp-day.sel {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.dp-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+.dp-gap { flex: 1; }
+
+/* 待办详情面板里的触发按钮：长得像输入框，点了才弹浮层 */
+.dp-trigger {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+.dp-trigger.blank { color: var(--text-mute); }

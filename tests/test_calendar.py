@@ -118,6 +118,25 @@ class MonthViewTest(unittest.TestCase):
         self.assertEqual(last["date"], "2026-12-31")
         self.assertEqual(last["week"], datetime.date(2026, 12, 31).isocalendar()[1])
 
+    def test_items_carry_day_hint(self):
+        v = model.month_view(2026, 9, today="2026-09-18")
+        by_day = {i["day"]: i["hint"] for i in v["items"]}
+        self.assertEqual(by_day[25], "中秋节 · 八月十五")   # 假期正日子（同名农历节日不重复写）
+        self.assertEqual(by_day[26], "中秋节 · 八月十六")   # 假期里的其他天也说明在假期里
+        self.assertEqual(by_day[20], "调休补班日 · 八月初十")
+        self.assertEqual(by_day[17], "")                    # 普通工作日不提示
+
+    def test_day_hint_merges_festival_and_term(self):
+        v = model.month_view(2026, 6, today="2026-09-18")
+        by_day = {i["day"]: i["hint"] for i in v["items"]}
+        # 6/21 既是端午假期、又是夏至 —— 三样都该出现
+        self.assertEqual(by_day[21], "端午节 · 夏至 · 五月初七")
+
+    def test_day_hint_covers_lunar_new_year_eve(self):
+        v = model.month_view(2026, 2, today="2026-09-18")
+        by_day = {i["day"]: i["hint"] for i in v["items"]}
+        self.assertEqual(by_day[16], "春节 · 除夕 · 腊月廿九")
+
     def test_invalid_args(self):
         self.assertIsNone(model.month_view(2026, 13))
         self.assertIsNone(model.month_view(2026, 0))

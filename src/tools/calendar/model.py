@@ -350,6 +350,30 @@ def is_festival_day(day, holiday_name):
     return False
 
 
+def day_hint(item):
+    """一句话说明"这天是什么日子"：假期名 / 调休补班日 / 农历节日 / 节气 + 完整农历。
+
+    普通日子返回空串 —— 前端据此决定要不要显示提示，免得每天都挂一行废话。
+    这份文案要同时给「待办的到期日提示」和「日期选择浮层的悬停」用，
+    所以口径放后端，前端不各拼一遍。
+    """
+    bits = []
+    if item.get("status") == HOLIDAY and item.get("name"):
+        bits.append(item["name"])
+    elif item.get("status") == ADJUST:
+        bits.append("调休补班日")
+
+    for extra in (item.get("fest"), item.get("term")):
+        if extra and not any(extra in b for b in bits):
+            bits.append(extra)
+
+    if not bits:
+        return ""
+    if item.get("lunar_full"):
+        bits.append(item["lunar_full"])
+    return " · ".join(bits)
+
+
 #: 内置数据文件（随程序包走）
 _BUNDLED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "holidays.json")
 
@@ -498,6 +522,10 @@ def month_view(year, month, today=None, years=None):
         if i["status"] == HOLIDAY and i["name"] and i["name"] not in anchored:
             i["fest_day"] = True
             anchored.add(i["name"])
+
+    # 每天配一句"这天是什么日子"（普通日子是空串）—— 口径见 day_hint()
+    for item in items:
+        item["hint"] = day_hint(item)
 
     # 月份概览：本月节假日 / 调休 数量与跨度（跨月假日两侧都只算本月的天数）
     overview = {

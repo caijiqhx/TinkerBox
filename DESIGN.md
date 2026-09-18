@@ -119,6 +119,8 @@ ToolBox/
 │  │     ├─ index.html
 │  │     ├─ app.js
 │  │     ├─ style.css
+│  │     ├─ ui/
+│  │     │  └─ datepicker.js # 日期选择浮层（外壳级通用小部件，工具经 ctx.pickDate 调用）
 │  │     └─ tools/
 │  │        ├─ todo.js       # 待办清单前端模块
 │  │        └─ calendar.js   # 日历前端模块
@@ -261,10 +263,13 @@ def get(tid): ...
   - hash 路由：`#/<工具 id>`；**路由解析只认路径部分**，`?` 后的参数（如 `#/todo?due=...`）由各工具自行读取
   - 统一封装 `callTool(tool, action, payload)` / `apiGet` / `apiPost`：自动带 token、自动解包
     `{ok,data,error}`、统一错误提示
-  - 对外提供 `ctx`（`el` / `callTool` / `toast` / `confirm` / `openModal` / `clear` / `dialogOpen` …）
+  - 对外提供 `ctx`（`el` / `callTool` / `toast` / `confirm` / `openModal` / `clear` / `dialogOpen` / `pickDate` …）
   - 主题三态（浅色 / 深色 / 跟随系统）；侧栏底部显示服务状态小字
 - `tools/todo.js`、`tools/calendar.js`：各自 IIFE，导出 `window.ToolBox.registerTool(id, {render})`；
   **只调 action，不写业务规则**；跨工具联动也是调对方的 action（如日历调 `todo.due_map`）
+- `ui/datepicker.js`：**外壳级通用小部件**（日期选择浮层），替代浏览器原生 `<input type="date">`。
+  工具通过 `ctx.pickDate({ value, anchor, onPick })` 调用，不直接依赖该模块（缺席也不崩）。
+  自绘的理由：原生弹层样式不跟主题、滚动翻月不受控，且"点日期即确认关闭"是写死的行为插不进「确定」
 - `style.css`：手写 CSS 变量做主题（`:root[data-theme=...]`），深浅两套
 
 ---

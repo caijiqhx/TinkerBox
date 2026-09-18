@@ -675,28 +675,10 @@
         if (items[i].date === date) { item = items[i]; break; }
       }
       if (!item) { return; }
-      var text = dueHintText(item);
+      /* 文案由后端拼（日期选择浮层的悬停用的是同一个 hint 字段），前端不重复一份 */
+      var text = item.hint || "";
       if (text) { node.textContent = text; }
     }).catch(function () { /* 日历不可用就不提示 */ });
-  }
-
-  /* 拼提示文本：只在"特殊日子"给内容，普通工作日返回空串（那行会被 CSS 收掉） */
-  function dueHintText(item) {
-    var bits = [];
-    if (item.status === "holiday" && item.name) { bits.push(item.name); }
-    else if (item.status === "workday") { bits.push("调休补班日"); }
-    if (item.fest && !hintCovered(bits, item.fest)) { bits.push(item.fest); }
-    if (item.term && !hintCovered(bits, item.term)) { bits.push(item.term); }
-    if (!bits.length) { return ""; }
-    if (item.lunar_full) { bits.push(item.lunar_full); }
-    return bits.join(" · ");
-  }
-
-  function hintCovered(bits, text) {
-    for (var i = 0; i < bits.length; i++) {
-      if (bits[i].indexOf(text) >= 0) { return true; }
-    }
-    return false;
   }
 
   function progressChip(task) {
@@ -1291,10 +1273,24 @@
     ]));
 
     /* --- 到期日 --- */
-    var dueInput = el("input", { class: "input", type: "date" });
-    dueInput.value = task.due || "";
-    dueInput.addEventListener("change", function () {
-      act("update", { id: task.id, fields: { due: dueInput.value } });
+    /* 用自绘的日期选择浮层（ctx.pickDate），不再用原生 <input type="date">：
+       原生弹层样式不跟主题、滚动与翻月不受控，而且"点日期即确认关闭"是浏览器写死的行为，
+       插不进「确定」按钮。 */
+    var dueBtn = el("button", {
+      class: "input dp-trigger" + (task.due ? "" : " blank"),
+      text: task.due ? dateLabel(task.due) : "选择日期",
+      title: task.due || "",
+      onclick: function () {
+        ctx.pickDate({
+          value: task.due || "",
+          anchor: dueBtn,
+          onPick: function (date) {
+            if ((date || "") !== (task.due || "")) {
+              act("update", { id: task.id, fields: { due: date || "" } });
+            }
+          }
+        });
+      }
     });
     /* 紧贴输入框下面那行"这天是什么日子"；没有特殊日子的日子它是空的（CSS :empty 收起） */
     var dueHint = el("div", { class: "detail-hint" });
@@ -1328,7 +1324,7 @@
 
     detailBox.appendChild(el("div", { class: "detail-sec" }, [
       dueLabel,
-      el("div", { class: "detail-row" }, [dueInput]),
+      el("div", { class: "detail-row" }, [dueBtn]),
       dueHint,
       quick
     ]));

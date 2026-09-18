@@ -567,7 +567,15 @@
     closeModal: closeModal,
     go: function (key) { window.location.hash = "#" + key; },
     el: el,
-    clear: clear
+    clear: clear,
+    /* 日期选择浮层（页内自绘）—— 实现在 ui/datepicker.js，加载后挂到 window.ToolBox.datePicker。
+       这里只做一层转发：工具侧认 ctx.pickDate，不直接依赖那个模块，模块缺席时也不会崩。 */
+    pickDate: function (options) {
+      var picker = window.ToolBox && window.ToolBox.datePicker;
+      if (!picker) { return false; }
+      picker.open(options);
+      return true;
+    }
   };
 
   window.ToolBox = {
@@ -582,6 +590,9 @@
   /* ================= 启动 ================= */
 
   function boot() {
+    /* 自绘日期选择浮层（ui/datepicker.js 若已加载）—— 需要 ctx 才能取日历数据 */
+    if (window.ToolBox.datePicker) { window.ToolBox.datePicker.init(ctx); }
+
     document.getElementById("btn-theme").addEventListener("click", cycleTheme);
     document.getElementById("btn-doctor").addEventListener("click", showDoctor);
     document.getElementById("btn-quit").addEventListener("click", quitApp);
