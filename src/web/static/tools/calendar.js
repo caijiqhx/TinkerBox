@@ -17,11 +17,14 @@
   var ctx = null;
   var el = null;
 
-  var headBox = null, overviewBox = null, gridBox = null;
+  var headBox = null, overviewBox = null, gridBox = null, shellBox = null;
   var pickerBox = null, titleBtn = null;   /* 年月快速选择面板 + 触发它的标题按钮 */
   var state = { year: 0, month: 0, pickerOpen: false, editingYear: false,
                 pickerYear: 0,      /* 面板里正在浏览的年份（与日历当前显示的年份分开，互不影响） */
-                picked: "" };       /* 被点选中的那一天（再点一次取消） */
+                picked: "",         /* 被点选中的那一天（再点一次取消） */
+                mode: "month",      /* month=月视图 / year=年度视图 */
+                calYear: 0 };       /* 年度视图里正在看的那一年 */
+  var yearMonths = null;               /* calendar.year 的结果（12 个月视图），只在年度视图用 */
   var dueMap = {};                     /* date -> {pending, done}，来自 todo.due_map */
   var cellNodes = {};                  /* date -> 格子节点：切换选中时只改这一个节点的 class，不整月重绘 */
 
@@ -79,8 +82,16 @@
       }
     });
 
+    /* 一屏看全年（假期分布）——年度视图与月视图互切，切过去不做月视图的取数 */
+    var yearBtn = el("button", {
+      class: "btn ghost",
+      text: "年视图",
+      title: "一屏看全年的假期分布",
+      onclick: function () { showYear(state.year); }
+    });
+
     var group = el("div", { class: "cal-head-group" }, [
-      prev, next, titleBtn, todayBtn
+      prev, next, titleBtn, todayBtn, yearBtn
     ]);
     headBox.appendChild(group);
   }
@@ -412,7 +423,7 @@
     gridBox.appendChild(legend);
   }
 
-  function loadMonth(year, month) {
+  function loadMonth(year, month, pickDate) {
     /* 日历数据与"当天待办数"并行取。
        待办那边取失败（例如工具被停用）就退化成纯日历，不影响主功能。 */
     var calendarReq = ctx.callTool("calendar", "month", { year: year, month: month });
@@ -422,10 +433,13 @@
     Promise.all([calendarReq, todoReq]).then(function (results) {
       var view = results[0] && results[0].view;
       if (!view) { return; }
+      if (state.mode !== "month") { return; }   /* 这中间已经切到年度视图了，别把月视图塞进去 */
       dueMap = (results[1] && results[1].days) || {};
       state.year = view.year;
       state.month = view.month;
-      state.picked = "";               /* 换月后原来选中的那天已经不在视野里 */
+      /* 换月后原来选中的那天已经不在视野里，默认清空；
+         从年度视图点某天进来时由调用方传入要选中的那一天。 */
+      state.picked = pickDate || "";
       renderHead(view);
       renderOverview(view);
       renderGrid(view);
@@ -467,6 +481,154 @@
     if (node) { node.className = node.className + " picked"; }
   }
 
+  /* ================= 年度视图 =================
+     一屏 12 个月，每格只标"这天是否放假 / 调休 / 周末"，用来看全年的假期分布。
+     数据用 calendar.year 一次拿全年（后端早就备好了）。
+     **不做待办计数**：那要 12 次请求，小格里也放不下 —— 看假期这件事本身不需要它；
+     想细看某天，点一下即回到月视图并选中那天。 */
+
+  function showYear(year) {
+    state.mode = "year";
+    state.calYear = year || state.year || new Date().getFullYear();
+    setPickerOpen(false);            /* 面板别留着：它的定位基准（头部）马上要重建 */
+    /* 一年并排需要更宽，年度视图放宽容器（切回月视图时还原） */
+    if (shellBox) { shellBox.className = "cal-shell wide"; }
+    loadYear(state.calYear);
+  }
+
+  /* 切回月视图；从年度视图点某一天时把要选中的那天一起带上 */
+  function showMonth(year, month, pickDate) {
+    state.mode = "month";
+    yearMonths = null;
+    if (shellBox) { shellBox.className = "cal-shell"; }
+    loadMonth(year, month, pickDate);
+  }
+
+  function loadYear(year) {
+    ctx.callTool("calendar", "year", { year: year }).then(function (data) {
+      if (state.mode !== "year") { return; }    /* 这中间已经切回月视图了 */
+      state.calYear = (data && data.year) || year;
+      yearMonths = (data && data.months) || [];
+      renderYearHead();
+      renderYear();
+    }).catch(function (err) {
+      ctx.toast(err.message, true);
+    });
+  }
+
+  function renderYearHead() {
+    ctx.clear(headBox);
+    var prev = el("button", {
+      class: "btn ghost icon",
+      html: chevron("left"),
+      title: "上一年",
+      onclick: function () { loadYear(state.calYear - 1); }
+    });
+    var next = el("button", {
+      class: "btn ghost icon",
+      html: chevron("right"),
+      title: "下一年",
+      onclick: function () { loadYear(state.calYear + 1); }
+    });
+    var title = el("div", { class: "cal-title static", text: state.calYear + " 年" });
+    var thisYear = el("button", {
+      class: "btn ghost",
+      text: "今年",
+      title: "回到今年",
+      onclick: function () { loadYear(new Date().getFullYear()); }
+    });
+    var back = el("button", {
+      class: "btn ghost",
+      text: "月视图",
+      title: "回到月视图",
+      onclick: function () {
+        showMonth(state.calYear, state.month || (new Date().getMonth() + 1));
+      }
+    });
+    headBox.appendChild(el("div", { class: "cal-head-group" }, [prev, next, title, thisYear, back]));
+  }
+
+  var MINI_WD = ["一", "二", "三", "四", "五", "六", "日"];
+
+  function renderYear() {
+    ctx.clear(overviewBox);          /* 年度视图不显示"本月概览" */
+    ctx.clear(gridBox);
+
+    var wrap = el("div", { class: "cal-year" });
+    for (var i = 0; i < yearMonths.length; i++) {
+      wrap.appendChild(monthCard(yearMonths[i]));
+    }
+    gridBox.appendChild(wrap);
+
+    /* 图例：年度视图里不标待办，所以比月视图少一条 */
+    gridBox.appendChild(el("div", { class: "cal-legend" }, [
+      el("span", { class: "lg" }, [el("i", { class: "lg-dot holiday" }), el("span", { text: "节假日" })]),
+      el("span", { class: "lg" }, [el("i", { class: "lg-dot adj" }), el("span", { text: "调休补班" })]),
+      el("span", { class: "lg" }, [el("i", { class: "lg-dot weekend" }), el("span", { text: "周末" })]),
+      el("span", { class: "lg" }, [el("i", { class: "lg-dot today" }), el("span", { text: "今天" })])
+    ]));
+  }
+
+  /* 一张月份卡片：标题（可点 → 打开该月）+ 假期概览 + 7×6 迷你网格 */
+  function monthCard(view) {
+    var card = el("div", { class: "cal-year-card" });
+
+    var head = el("div", { class: "cal-year-head" }, [
+      el("button", {
+        class: "cal-year-month",
+        text: view.month + " 月",
+        title: "打开 " + view.year + " 年 " + view.month + " 月",
+        onmousedown: noFocus,
+        onclick: function () { showMonth(view.year, view.month); }
+      })
+    ]);
+    var ov = view.overview || {};
+    var stats = [];
+    if (ov.holidays) { stats.push("休 " + ov.holidays); }
+    if (ov.adjusts) { stats.push("补 " + ov.adjusts); }
+    if (stats.length) {
+      head.appendChild(el("span", { class: "cal-year-stat", text: stats.join(" · ") }));
+    }
+    card.appendChild(head);
+
+    var mini = el("div", { class: "cal-mini" });
+    for (var w = 0; w < 7; w++) {
+      mini.appendChild(el("div", { class: "cal-mini-wd", text: MINI_WD[w] }));
+    }
+    var lead = view.weekday0;
+    for (var n = 0; n < 42; n++) {          /* 固定 6 行：各月卡片高度一致 */
+      var idx = n - lead;
+      if (idx < 0 || idx >= view.items.length) {
+        mini.appendChild(el("div", { class: "cal-mini-day out" }));
+        continue;
+      }
+      var item = view.items[idx];
+      var cls = "cal-mini-day";
+      if (item.status === "holiday") { cls += " holiday"; }
+      else if (item.status === "workday") { cls += " workday"; }
+      else if (item.status === "weekend") { cls += " weekend"; }
+      if (item.date === view.today) { cls += " today"; }
+      mini.appendChild(el("button", {
+        class: cls,
+        text: String(item.day),
+        /* 提示与月视图同源：特殊日子给 hint（假期 / 调休 / 农历节日 / 节气 + 农历），
+           普通日子只给农历 —— 小格子里写字放不下，信息全靠悬停。 */
+        title: item.hint || item.lunar_full || "",
+        onmousedown: noFocus,
+        onclick: (function (d) { return function () { showMonthAndPick(d); }; })(item.date)
+      }));
+    }
+    card.appendChild(mini);
+    return card;
+  }
+
+  /* 年度视图里点某一天 → 回月视图、跳到那个月并选中那天
+     （选中之后格内的「清单」「＋」就是常驻的，接着操作很顺） */
+  function showMonthAndPick(date) {
+    var parts = date.split("-");
+    showMonth(parseInt(parts[0], 10), parseInt(parts[1], 10), date);
+  }
+
   function render(container, context) {
     ctx = context;
     el = ctx.el;
@@ -475,8 +637,12 @@
     state.month = 0;
     state.pickerOpen = false;
     state.editingYear = false;
+    state.mode = "month";            /* 每次进入工具都从月视图开始 */
+    state.calYear = 0;
+    yearMonths = null;
 
     var shell = el("div", { class: "cal-shell" });
+    shellBox = shell;
     headBox = el("div", { class: "cal-head" });
     pickerBox = el("div", { class: "cal-picker hidden" });
     overviewBox = el("div", { class: "cal-overview-wrap" });

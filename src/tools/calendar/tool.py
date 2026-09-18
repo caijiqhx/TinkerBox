@@ -52,7 +52,7 @@ class CalendarTool(Tool):
         return {"view": view}
 
     def act_year(self, payload):
-        """返回某年每个月的月视图（供前端一次性拿全年，暂未用）。"""
+        """返回某年每个月的月视图（供前端的"年度视图"一次拿全年）。"""
         year = payload.get("year")
         if year is None:
             import datetime

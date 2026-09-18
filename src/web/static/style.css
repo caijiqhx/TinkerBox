@@ -1313,6 +1313,89 @@ mark.hit {
   border-radius: 50%;
 }
 
+/* ---------- 年度视图：一屏 12 个月，看全年假期分布 ----------
+   格子很小，只放日号 + 状态底色；农历 / 节日那些文字都在悬停提示里。 */
+.cal-shell.wide { max-width: 940px; }          /* 月视图 720 够用；一年并排需要更宽 */
+
+.cal-year {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+.cal-year-card {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 8px 9px 9px;
+}
+.cal-year-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+/* 月份名即入口：点它打开这个月（外观像标题，hover 才露出可点） */
+.cal-year-month {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--heading);
+  padding: 1px 5px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .14s, border-color .14s, color .14s;
+}
+.cal-year-month:hover { background: var(--panel-2); border-color: var(--border); color: var(--accent); }
+.cal-year-stat { font-size: 10.5px; color: var(--text-mute); white-space: nowrap; }
+
+.cal-mini {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.cal-mini-wd {
+  font-size: 10px;
+  color: var(--text-mute);
+  text-align: center;
+  padding-bottom: 1px;
+}
+.cal-mini-day {
+  position: relative;
+  height: 21px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.cal-mini-day:hover { background: var(--panel-2); border-color: var(--border); }
+.cal-mini-day.holiday { background: var(--holiday-bg); color: var(--holiday-fg); font-weight: 600; }
+.cal-mini-day.holiday:hover { background: var(--holiday-bg-hover); border-color: var(--holiday-line); }
+.cal-mini-day.workday { background: var(--adjust-bg); color: var(--adjust-fg); }
+.cal-mini-day.workday:hover { background: var(--adjust-bg-hover); border-color: var(--adjust-line); }
+.cal-mini-day.weekend { color: var(--text-mute); }
+.cal-mini-day.out { visibility: hidden; }       /* 上下月补位：留位置但不显示 */
+.cal-mini-day.today::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+/* 年度视图的标题只是标题（月视图里它是"点开年月面板"的按钮） */
+.cal-title.static { cursor: default; }
+.cal-title.static:hover { background: transparent; border-color: transparent; }
+
 @media (max-width: 1180px) {
   .todo-shell { grid-template-columns: 180px minmax(0, 1fr); }
   .todo-shell .detail {
