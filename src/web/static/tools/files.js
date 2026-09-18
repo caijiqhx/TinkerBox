@@ -142,6 +142,14 @@
       }, 260);
     });
 
+    var addCurrentBtn = ctx.el("button", {
+      class: "btn small ghost fb-add-current",
+      html: ICONS.add + "<span>加为位置</span>",
+      title: "把当前这个文件夹加进「位置」列表，之后能一键跳回",
+      onclick: function () { addCurrentAsRoot(); }
+    });
+    nodes.addCurrentBtn = addCurrentBtn;
+
     var bar = ctx.el("div", { class: "fb-bar" }, [
       upBtn,
       nodes.crumbStrip,
@@ -149,6 +157,7 @@
         ctx.el("label", { class: "fb-toggle", title: "显示以点开头的隐藏条目" }, [
           hiddenBox, ctx.el("span", { text: "隐藏项" })
         ]),
+        addCurrentBtn,
         nodes.keywordInput
       ])
     ]);
@@ -294,6 +303,25 @@
     });
   }
 
+  /* 把**当前正在浏览的目录**加进位置列表。
+     后端会做去重与路径校验（必须落在已添加位置之内、且是真实目录），
+     前端只做一层「已经是位置就不重复请求」的提示。 */
+  function addCurrentAsRoot() {
+    if (!state.path) { return; }
+    var already = state.roots.some(function (root) {
+      return samePath(root.path, state.path);
+    });
+    if (already) {
+      ctx.toast("当前文件夹已经是一个位置了", true);
+      return;
+    }
+    call("add_root", { path: state.path }).then(function (data) {
+      return loadInfo();
+    }).then(function () {
+      ctx.toast("已加为位置");
+    }).catch(function (err) { ctx.toast(err.message, true); });
+  }
+
   /* ================= 导航与列目录 ================= */
 
   function go(path) {
@@ -331,6 +359,14 @@
     state.store = (data && data.store) || state.store;
 
     nodes.upBtn.className = "ico-btn fb-up" + (state.parent ? "" : " disabled");
+    if (nodes.addCurrentBtn) {
+      var isRoot = state.roots.some(function (root) {
+        return samePath(root.path, state.path);
+      });
+      nodes.addCurrentBtn.className = "btn small ghost fb-add-current" +
+        (isRoot || !state.path ? " disabled" : "");
+      nodes.addCurrentBtn.disabled = isRoot || !state.path;
+    }
     renderPlaces();
     renderCrumbs();
     renderList();
@@ -357,6 +393,10 @@
   function renderEmptyStart() {
     ctx.clear(nodes.crumbs);
     ctx.clear(nodes.foot);
+    if (nodes.addCurrentBtn) {
+      nodes.addCurrentBtn.className = "btn small ghost fb-add-current disabled";
+      nodes.addCurrentBtn.disabled = true;
+    }
     var box = nodes.list;
     ctx.clear(box);
     box.appendChild(ctx.el("div", { class: "empty" }, [

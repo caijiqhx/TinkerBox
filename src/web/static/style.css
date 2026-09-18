@@ -1657,6 +1657,8 @@ mark.hit {
 }
 .fb-check { margin: 0; cursor: pointer; }
 .fb-search { width: 150px; font-size: 12.5px; padding: 5px 9px; }
+.fb-add-current { display: inline-flex; align-items: center; gap: 4px; }
+.fb-add-current.disabled { opacity: .35; cursor: default; }
 
 /* ---- 列表：四列网格，表头与行共用同一套列宽 ---- */
 .fb-list { margin-top: 4px; }
