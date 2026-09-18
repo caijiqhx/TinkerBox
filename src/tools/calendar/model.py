@@ -129,6 +129,36 @@ def ganzhi_of_year(lunar_year):
     return _GAN[offset % 10] + _ZHI[offset % 12] + _ZODIAC[offset % 12] + "年"
 
 
+def lunar_year_of(day):
+    """某个公历日期所属的**农历年**（干支纪年以正月初一换年，不是元旦）。
+
+    例：2026-02-10 还在乙巳蛇年（春节 2/17），返回 2025；2026-02-17 起返回 2026。
+    超出农历表范围（1900-2100）或非法日期返回 None。
+    """
+    try:
+        y, m, d = (int(x) for x in day.split("-"))
+    except (ValueError, AttributeError):
+        return None
+    got = _solar2lunar(y, m, d)
+    return got[0] if got else None
+
+
+def ganzhi_span(first_day, last_day):
+    """一个日期区间横跨的干支年。
+
+    同属一个农历年 → 「乙巳蛇年」；跨农历年 → 「乙巳蛇年 → 丙午马年」。
+    公历月天然与农历年错位（1 月、2 月常跨年），所以用区间而不是单点，
+    这样"某个月显示什么干支"才是准确的。
+    """
+    start = lunar_year_of(first_day)
+    end = lunar_year_of(last_day)
+    if start is None or end is None:
+        return ""
+    if start == end:
+        return ganzhi_of_year(start)
+    return ganzhi_of_year(start) + " → " + ganzhi_of_year(end)
+
+
 
 def _leap_month(ly):
     """农历年份的闰月（0 表示无闰月）。"""
@@ -594,9 +624,10 @@ def month_view(year, month, today=None, years=None):
         "year": year,
         "month": month,
         "year_month": "%04d-%02d" % (year, month),
-        # 干支纪年 + 生肖（如「丙午马年」）。按公历年算 —— 即该年春节之后的干支，
-        # 这也是万年历上"某年是什么年"的通行口径（农历年内换年，见 README 说明）。
-        "ganzhi": ganzhi_of_year(year),
+        # 干支纪年 + 生肖（如「丙午马年」）。按**农历年**（正月初一换年）判定，
+        # 且用整个月的区间 —— 公历月常跨农历年（1 月、2 月），此时显示「乙巳蛇年 → 丙午马年」。
+        "ganzhi": ganzhi_span("%04d-%02d-01" % (year, month),
+                              "%04d-%02d-%02d" % (year, month, days_in_month)),
         "weekday0": first.weekday(),     # 0=周一
         "days": days_in_month,
         "today": today_text if today_text[:7] == ("%04d-%02d" % (year, month)) else None,

@@ -68,7 +68,10 @@ class CalendarTool(Tool):
             if view is None:
                 continue
             months.append(view)
-        return {"year": year, "ganzhi": model.ganzhi_of_year(year), "months": months}
+        # 整年的干支：按农历年判定，跨农历年时给出两段（如「乙巳蛇年 → 丙午马年」）
+        return {"year": year,
+                "ganzhi": model.ganzhi_span("%04d-01-01" % year, "%04d-12-31" % year),
+                "months": months}
 
     # ------------------------------------------------------------------
     # 命令行

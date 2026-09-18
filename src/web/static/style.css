@@ -936,11 +936,12 @@ mark.hit {
 
 /* ---------------- 日历 ---------------- */
 
-/* 标题旁边的干支纪年（丙午马年）—— 跟在"2026 年 9 月"后面，小字不抢视线 */
+/* 标题旁边的干支纪年（丙午马年；跨农历年时是「乙巳蛇年 → 丙午马年」）—— 小字不抢视线 */
 .cal-ganzhi {
   font-size: 12.5px;
   color: var(--text-mute);
   margin-left: -4px;      /* 标题按钮自带内边距，视觉上贴回来一点 */
+  white-space: nowrap;    /* 跨农历年的两段别折行 */
 }
 
 .cal-shell { max-width: 720px; position: relative; }   /* 年月面板以它为定位上下文 */

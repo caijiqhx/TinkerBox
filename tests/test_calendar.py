@@ -520,7 +520,29 @@ class GanzhiTest(unittest.TestCase):
 
     def test_month_view_carries_ganzhi(self):
         self.assertEqual(model.month_view(2026, 9)["ganzhi"], "丙午马年")
-        self.assertEqual(model.month_view(1900, 1)["ganzhi"], "庚子鼠年")
+        # 干支按**农历年**（正月初一换年）：2026 年 1 月仍是乙巳蛇年
+        self.assertEqual(model.month_view(2026, 1)["ganzhi"], "乙巳蛇年")
+        # 2 月跨农历年（春节 2/17）→ 两段都给出
+        self.assertEqual(model.month_view(2026, 2)["ganzhi"], "乙巳蛇年 → 丙午马年")
+        self.assertEqual(model.month_view(2026, 3)["ganzhi"], "丙午马年")
+
+    def test_lunar_year_of_switches_at_spring_festival(self):
+        self.assertEqual(model.lunar_year_of("2026-02-16"), 2025)      # 除夕
+        self.assertEqual(model.lunar_year_of("2026-02-17"), 2026)      # 正月初一
+        self.assertEqual(model.lunar_year_of("2026-01-01"), 2025)
+        self.assertIsNone(model.lunar_year_of("abc"))
+        self.assertIsNone(model.lunar_year_of("2102-01-01"))           # 超出农历表范围（表到 2100）
+
+    def test_ganzhi_span(self):
+        self.assertEqual(model.ganzhi_span("2026-09-01", "2026-09-30"), "丙午马年")
+        self.assertEqual(model.ganzhi_span("2026-01-01", "2026-12-31"), "乙巳蛇年 → 丙午马年")
+        self.assertEqual(model.ganzhi_span("2101-01-01", "2101-12-31"), "")
+
+    def test_table_edges_degrade_to_empty(self):
+        """农历表从 1900-01-31 开始，之前的日子拿不到农历年 —— 退化成不显示，而不是瞎猜。"""
+        self.assertEqual(model.month_view(1900, 1)["ganzhi"], "")
+        self.assertEqual(model.month_view(1901, 1)["ganzhi"], "庚子鼠年")
+        self.assertEqual(model.month_view(2101, 6)["ganzhi"], "")
 
 
 class CalendarToolTest(unittest.TestCase):
@@ -546,7 +568,8 @@ class CalendarToolTest(unittest.TestCase):
     def test_year_action(self):
         res = self.tool.call("year", {"year": 2026})
         self.assertEqual(res["year"], 2026)
-        self.assertEqual(res["ganzhi"], "丙午马年")
+        # 整年跨农历年（1 月还在乙巳，2/17 起丙午）
+        self.assertEqual(res["ganzhi"], "乙巳蛇年 → 丙午马年")
         self.assertEqual(len(res["months"]), 12)
 
     def test_year_action_defaults_to_today(self):
