@@ -68,9 +68,11 @@ class CalendarTool(Tool):
             if view is None:
                 continue
             months.append(view)
-        # 整年的干支：按农历年判定，跨农历年时给出两段（如「乙巳蛇年 → 丙午马年」）
+        # 年度视图标注"这一年是什么年" → 用该年春节起的干支（万年历上的通行说法，如「丙午马年」），
+        # 不写跨年箭头。这与 month_view 的口径不同（那边按区间、跨农历年会给出两段），
+        # 因为月视图看的是"这个月里经历了什么"，年度视图看的是"这一年叫什么年"。
         return {"year": year,
-                "ganzhi": model.ganzhi_span("%04d-01-01" % year, "%04d-12-31" % year),
+                "ganzhi": model.ganzhi_of_year(year),
                 "months": months}
 
     # ------------------------------------------------------------------

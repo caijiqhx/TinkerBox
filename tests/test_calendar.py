@@ -568,9 +568,16 @@ class CalendarToolTest(unittest.TestCase):
     def test_year_action(self):
         res = self.tool.call("year", {"year": 2026})
         self.assertEqual(res["year"], 2026)
-        # 整年跨农历年（1 月还在乙巳，2/17 起丙午）
-        self.assertEqual(res["ganzhi"], "乙巳蛇年 → 丙午马年")
+        # 年度视图标"这一年是什么年" → 该年春节起的干支，不带跨年箭头
+        self.assertEqual(res["ganzhi"], "丙午马年")
         self.assertEqual(len(res["months"]), 12)
+
+    def test_year_ganzhi_does_not_need_lunar_table(self):
+        """年度视图只标"这一年是什么年"，走纯公式 —— 农历表范围外也算得出来。"""
+        cases = {1990: "庚午马年", 2000: "庚辰龙年", 2025: "乙巳蛇年",
+                 2026: "丙午马年", 2027: "丁未羊年", 2105: "乙丑牛年"}
+        for year, want in cases.items():
+            self.assertEqual(self.tool.call("year", {"year": year})["ganzhi"], want, year)
 
     def test_year_action_defaults_to_today(self):
         res = self.tool.call("year", {})
