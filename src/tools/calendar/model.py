@@ -407,13 +407,35 @@ def _load_user():
 
 
 def load_years():
-    """合并内置 + 用户数据，用户优先。返回 {年份: {...}}。"""
+    """合并内置 + 用户数据，用户优先。返回 {年份: {...}}。
+
+    合并粒度是**按条目**，不是按年整块替换：
+    - holidays 里**同名的假期**由用户数据整条覆盖，用户没写的假期保留内置的
+    - workdays 取并集
+    这样"只想补一天 / 补某一年里的一个假期"的用户数据，不会把内置那一年的
+    其余安排静默顶掉（旧实现是 merged[year] = 用户数据，写一天就丢掉整年）。
+    """
     merged = {}
-    bundled = _load_bundled()
-    for year, data in bundled.items():
-        merged[year] = data
+    for year, data in _load_bundled().items():
+        if isinstance(data, dict):
+            merged[year] = {
+                "holidays": dict(data.get("holidays") or {}),
+                "workdays": list(data.get("workdays") or []),
+            }
     for year, data in _load_user().items():
-        merged[year] = data
+        if not isinstance(data, dict):
+            continue
+        cur = merged.setdefault(str(year), {"holidays": {}, "workdays": []})
+        holidays = data.get("holidays")
+        if isinstance(holidays, dict):
+            for name, days in holidays.items():
+                if isinstance(days, list):
+                    cur["holidays"][name] = list(days)
+        workdays = data.get("workdays")
+        if isinstance(workdays, list):
+            for day in workdays:
+                if day not in cur["workdays"]:
+                    cur["workdays"].append(day)
     return merged
 
 

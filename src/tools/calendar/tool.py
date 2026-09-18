@@ -62,8 +62,9 @@ class CalendarTool(Tool):
         except (TypeError, ValueError):
             raise ToolError("年份无效：%r" % (year,))
         months = []
+        years = model.load_years()      # 读一次给 12 个月复用：否则每次 month_view 都会重读数据文件
         for month in range(1, 13):
-            view = model.month_view(year, month)
+            view = model.month_view(year, month, years=years)
             if view is None:
                 continue
             months.append(view)

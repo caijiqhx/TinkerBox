@@ -406,6 +406,92 @@ class OverviewTest(unittest.TestCase):
         self.assertEqual(ov["adjust_span"], [])
 
 
+class MergeYearsTest(unittest.TestCase):
+    """用户数据与内置数据的合并粒度：**按条目合并**，不是按年整块替换。
+
+    背景：旧实现是 merged[year] = 用户数据，于是"只想补一天"的用户文件会把
+    内置那一年的其余安排静默顶掉（界面上表现为"假期忽然全没了"）。
+    """
+
+    def setUp(self):
+        import json
+        import shutil
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        self.json = json
+        self.shutil = shutil
+        self.tmp = tempfile.mkdtemp(prefix="tb-cal-test-")
+        patcher = mock.patch.dict(os.environ, {"TOOLBOX_DATA_DIR": self.tmp})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.path = Path(self.tmp) / "holidays.json"
+
+    def _write(self, years):
+        with open(str(self.path), "w", encoding="utf-8") as handle:
+            self.json.dump({"version": 1, "years": years}, handle, ensure_ascii=False)
+
+    # ---------------------------------------------------------------- 核心：不丢数据
+    def test_single_day_does_not_wipe_builtin_year(self):
+        """用户只补一天，内置同一年的其他假期必须还在。"""
+        self._write({"2026": {"holidays": {"自定义假": ["2026-09-25"]}}})
+        years = model.load_years()
+        builtin_names = ["元旦", "春节", "清明节", "劳动节", "端午节", "中秋节", "国庆节"]
+        for name in builtin_names:
+            self.assertIn(name, years["2026"]["holidays"], "内置的 %s 被顶掉了" % name)
+        self.assertEqual(years["2026"]["holidays"]["自定义假"], ["2026-09-25"])
+        # 内置的调休也还在
+        self.assertIn("2026-02-14", years["2026"]["workdays"])
+
+    def test_same_holiday_name_is_replaced_whole(self):
+        """同名假期：用户整条覆盖（而不是两条拼在一起）。"""
+        self._write({"2026": {"holidays": {"春节": ["2026-02-16"]}}})
+        years = model.load_years()
+        self.assertEqual(years["2026"]["holidays"]["春节"], ["2026-02-16"])
+        self.assertEqual(years["2026"]["holidays"]["国庆节"][0], "2026-10-01")
+
+    def test_workdays_are_unioned(self):
+        self._write({"2026": {"workdays": ["2026-03-07"]}})
+        years = model.load_years()
+        self.assertIn("2026-03-07", years["2026"]["workdays"])
+        self.assertIn("2026-02-14", years["2026"]["workdays"])      # 内置的仍在
+
+    def test_new_year_from_user_is_added(self):
+        self._write({"2027": {"holidays": {"元旦": ["2027-01-01"]}}})
+        years = model.load_years()
+        self.assertEqual(years["2027"]["holidays"]["元旦"], ["2027-01-01"])
+        self.assertIn("2026", years)                                # 内置年份不受影响
+
+    def test_broken_user_file_is_ignored(self):
+        with open(str(self.path), "w", encoding="utf-8") as handle:
+            handle.write("{ 这不是 json")
+        years = model.load_years()                                  # 不抛异常
+        self.assertIn("2026", years)
+        self.assertIn("春节", years["2026"]["holidays"])
+
+    def test_odd_structures_are_ignored(self):
+        self._write({"2026": {"holidays": "不是字典", "workdays": {"也不是": "列表"}}})
+        years = model.load_years()
+        self.assertIn("春节", years["2026"]["holidays"])
+
+
+class CrossYearDataTest(unittest.TestCase):
+    """跨年那几天：数据按"日期所属年份"归档，12 月也能查到下一年的元旦安排。"""
+
+    def test_dec_31_belongs_to_next_year_new_year_holiday(self):
+        for day in ("2000-12-31", "2007-12-31", "2018-12-31", "2022-12-31"):
+            got = model.day_status(day)
+            self.assertEqual(got["status"], model.HOLIDAY, day)
+            self.assertEqual(got["name"], "元旦", day)
+
+    def test_dec_weekend_workday_recorded_in_local_year(self):
+        """2007 元旦的调休上班日落在 2006-12-30/31，要归 2006 才能被查到。"""
+        for day in ("2006-12-30", "2006-12-31", "2005-12-31"):
+            self.assertEqual(model.day_status(day)["status"], model.ADJUST, day)
+
+
 class CalendarToolTest(unittest.TestCase):
     def setUp(self):
         self.tool = tool.CalendarTool()
