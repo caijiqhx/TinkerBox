@@ -94,6 +94,30 @@ class MonthViewTest(unittest.TestCase):
             v = model.month_view(now.year, now.month - 1)
         self.assertIsNone(v["today"])
 
+    def test_items_carry_iso_week(self):
+        v = model.month_view(2026, 9, today="2026-09-18")
+        by_day = {i["day"]: i["week"] for i in v["items"]}
+        self.assertEqual(by_day[1], 36)      # 2026-09-01 属于第 36 周
+        self.assertEqual(by_day[7], 37)      # 周一换周
+        self.assertEqual(by_day[30], 40)
+
+    def test_week_is_uniform_within_a_row(self):
+        # 日历按行显示一周，所以同一行内所有天的周号必须一致（前端取该行第一格即可）
+        v = model.month_view(2026, 9, today="2026-09-18")
+        lead = v["weekday0"]
+        rows = {}
+        for n, item in enumerate(v["items"]):
+            rows.setdefault((lead + n) // 7, set()).add(item["week"])
+        for row, weeks in rows.items():
+            self.assertEqual(len(weeks), 1, "第 %d 行出现多个周号: %s" % (row, weeks))
+
+    def test_week_across_year_boundary(self):
+        # ISO 规则下 12 月底可能已经属于次年第 1 周，值直接跟标准库对齐
+        v = model.month_view(2026, 12, today="2026-09-18")
+        last = v["items"][-1]
+        self.assertEqual(last["date"], "2026-12-31")
+        self.assertEqual(last["week"], datetime.date(2026, 12, 31).isocalendar()[1])
+
     def test_invalid_args(self):
         self.assertIsNone(model.month_view(2026, 13))
         self.assertIsNone(model.month_view(2026, 0))

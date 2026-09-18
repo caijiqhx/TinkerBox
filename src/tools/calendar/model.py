@@ -475,6 +475,8 @@ def month_view(year, month, today=None, years=None):
         items.append({
             "day": day,
             "date": iso,
+            # ISO 周号（周一起算，第 1 周 = 含 1 月 4 日的那周）—— 日历左侧那列"第几周"
+            "week": date.isocalendar()[1],
             "status": status["status"],
             "name": status["name"],
             # 上面这个名字是否该显示在格子里：只有"正日子"才显示（中秋只在中秋节当天），

@@ -252,6 +252,7 @@
     ctx.clear(gridBox);
 
     var weekHead = el("div", { class: "cal-week" });
+    weekHead.appendChild(el("div", { class: "cal-wday", text: "周" }));   /* 第一列：周序号 */
     var weekNames = ["一", "二", "三", "四", "五", "六", "日"];
     for (var i = 0; i < 7; i++) {
       weekHead.appendChild(el("div", { class: "cal-wday", text: weekNames[i] }));
@@ -259,120 +260,145 @@
     gridBox.appendChild(weekHead);
 
     var grid = el("div", { class: "cal-grid" });
-    /* 前置空白格：月份第一天是周几（weekday0，0=周一），前面补空格 */
-    for (var pad = 0; pad < view.weekday0; pad++) {
-      grid.appendChild(el("div", { class: "cal-cell empty" }));
-    }
 
     var today = view.today;   /* 仅当月含今天时才非空 */
     cellNodes = {};
-    for (var n = 0; n < view.items.length; n++) {
-      (function (item) {
-        var cls = "cal-cell " + item.status;
-        if (item.date === today) { cls += " today"; }
-        if (item.date === state.picked) { cls += " picked"; }
+    var lead = view.weekday0;
+    var rows = Math.ceil((lead + view.items.length) / 7);
 
-        var counts = dueMap[item.date] || { pending: 0, done: 0 };
-        var hasTask = counts.pending > 0 || counts.done > 0;
-
-        /* 名称行内容：法定节假日名 —— **只在"正日子"当天显示**（中秋只在中秋节那天，
-           假期里的其他天不写，否则像是放了三个中秋），其余日子把名字放悬停提示里说明。 */
-        var holidayName = (item.status === "holiday" && item.name) ? item.name : "";
-        var badgeText = (holidayName && item.fest_day) ? holidayName : "";
-
-        /* 农历行补一个"今天是什么日子"：农历节日优先，其次节气。 */
-        var extra = item.fest || item.term || "";
-        if (extra && badgeText && badgeText.indexOf(extra) >= 0) { extra = ""; }
-
-        /* 格子里这一行只放"这天是什么日子"，优先级：法定假日名 > 农历节日 > 节气 > 农历日。
-           正日子当天上面已经写了名字，就不再叠一个农历日（「中秋节」下面不必再来个「十五」，
-           完整农历悬停提示里有）；若当天另有不重复的农历节日（如国庆节撞中秋）才保留。 */
-        var lunarLine = badgeText ? extra : (extra || item.lunar || "");
-
-        /* 悬停提示：第一行 = 假期名 / 农历节日 / 节气 / 完整农历（八月初三，格子里只放得下"初三"），
-           第二行 = 当天待办情况（换行显示，挤在一行太长）。
-           提示层支持多行（white-space: pre-line），这里直接放 \n 即可。 */
-        var parts = [];
-        if (holidayName && !nameCovered(parts, holidayName)) { parts.push(holidayName); }
-        if (item.fest && !nameCovered(parts, item.fest)) { parts.push(item.fest); }
-        if (item.term && !nameCovered(parts, item.term)) { parts.push(item.term); }
-        if (item.lunar_full) { parts.push(item.lunar_full); }
-        var tip = parts.join(" · ");
-        if (hasTask) {
-          var line = "待办 " + counts.pending + " 项未完成";
-          if (counts.done) { line += "、" + counts.done + " 项已完成"; }
-          tip = tip ? (tip + "\n" + line) : line;
+    /* 该行第一个"属于本月"的格子决定周号（同一行本来就是同一周） */
+    function rowWeek(row) {
+      for (var c = 0; c < 7; c++) {
+        var idx = row * 7 + c - lead;
+        if (idx >= 0 && idx < view.items.length) {
+          return String(view.items[idx].week || "");
         }
+      }
+      return "";
+    }
 
-        var kids = [];
-        kids.push(el("span", { class: "cal-num", text: String(item.day) }));
+    /* 单个日期格子（原来是一段扁平循环，搬进函数后按行调用） */
+    function buildCell(item) {
+      var cls = "cal-cell " + item.status;
+      if (item.date === today) { cls += " today"; }
+      if (item.date === state.picked) { cls += " picked"; }
 
-        /* 业务行：节假日名 / 调休「班」徽标（比农历重要，放前面） */
-        if (badgeText) {
-          kids.push(el("span", { class: "cal-name", text: badgeText }));
-        } else if (item.status === "workday") {
-          kids.push(el("span", { class: "cal-adj", text: "班" }));
+      var counts = dueMap[item.date] || { pending: 0, done: 0 };
+      var hasTask = counts.pending > 0 || counts.done > 0;
+
+      /* 名称行内容：法定节假日名 —— **只在"正日子"当天显示**（中秋只在中秋节那天，
+         假期里的其他天不写，否则像是放了三个中秋），其余日子把名字放悬停提示里说明。 */
+      var holidayName = (item.status === "holiday" && item.name) ? item.name : "";
+      var badgeText = (holidayName && item.fest_day) ? holidayName : "";
+
+      /* 农历行补一个"今天是什么日子"：农历节日优先，其次节气。 */
+      var extra = item.fest || item.term || "";
+      if (extra && badgeText && badgeText.indexOf(extra) >= 0) { extra = ""; }
+
+      /* 格子里这一行只放"这天是什么日子"，优先级：法定假日名 > 农历节日 > 节气 > 农历日。
+         正日子当天上面已经写了名字，就不再叠一个农历日（「中秋节」下面不必再来个「十五」，
+         完整农历悬停提示里有）；若当天另有不重复的农历节日（如国庆节撞中秋）才保留。 */
+      var lunarLine = badgeText ? extra : (extra || item.lunar || "");
+
+      /* 悬停提示：第一行 = 假期名 / 农历节日 / 节气 / 完整农历（八月初三，格子里只放得下"初三"），
+         第二行 = 当天待办情况（换行显示，挤在一行太长）。
+         提示层支持多行（white-space: pre-line），这里直接放 \n 即可。 */
+      var parts = [];
+      if (holidayName && !nameCovered(parts, holidayName)) { parts.push(holidayName); }
+      if (item.fest && !nameCovered(parts, item.fest)) { parts.push(item.fest); }
+      if (item.term && !nameCovered(parts, item.term)) { parts.push(item.term); }
+      if (item.lunar_full) { parts.push(item.lunar_full); }
+      var tip = parts.join(" · ");
+      if (hasTask) {
+        var line = "待办 " + counts.pending + " 项未完成";
+        if (counts.done) { line += "、" + counts.done + " 项已完成"; }
+        tip = tip ? (tip + "\n" + line) : line;
+      }
+
+      var kids = [];
+      kids.push(el("span", { class: "cal-num", text: String(item.day) }));
+
+      /* 业务行：节假日名 / 调休「班」徽标（比农历重要，放前面） */
+      if (badgeText) {
+        kids.push(el("span", { class: "cal-name", text: badgeText }));
+      } else if (item.status === "workday") {
+        kids.push(el("span", { class: "cal-adj", text: "班" }));
+      }
+
+      /* 农历行：常态是农历（初一显示月名「正月」，其余显示「初二 / 十五」）；
+         当天有农历节日 / 节气时，整行换成它（如「立秋」「除夕」「龙抬头」）——
+         单独一层样式，比农历的灰更实一点 */
+      if (lunarLine) {
+        var lunarNode = el("span", { class: "cal-lunar" });
+        if (extra) {
+          lunarNode.appendChild(el("span", { class: "cal-extra", text: extra }));
+        } else {
+          lunarNode.appendChild(el("span", { text: item.lunar }));
         }
+        kids.push(lunarNode);
+      }
 
-        /* 农历行：常态是农历（初一显示月名「正月」，其余显示「初二 / 十五」）；
-           当天有农历节日 / 节气时，整行换成它（如「立秋」「除夕」「龙抬头」）——
-           单独一层样式，比农历的灰更实一点 */
-        if (lunarLine) {
-          var lunarNode = el("span", { class: "cal-lunar" });
-          if (extra) {
-            lunarNode.appendChild(el("span", { class: "cal-extra", text: extra }));
-          } else {
-            lunarNode.appendChild(el("span", { text: item.lunar }));
-          }
-          kids.push(lunarNode);
+      /* 当天待办：未完成醒目（实心点 + 数字）、已完成弱化（空心点），
+         口径与「某天待办」视图一致。（已完成也按到期日归属） */
+      if (hasTask) {
+        var dueRow = el("span", { class: "cal-due" });
+        if (counts.pending) {
+          dueRow.appendChild(el("span", { class: "due-pending", text: String(counts.pending) }));
         }
-
-        /* 当天待办：未完成醒目（实心点 + 数字）、已完成弱化（空心点），
-           口径与「某天待办」视图一致。（已完成也按到期日归属） */
-        if (hasTask) {
-          var dueRow = el("span", { class: "cal-due" });
-          if (counts.pending) {
-            dueRow.appendChild(el("span", { class: "due-pending", text: String(counts.pending) }));
-          }
-          if (counts.done) {
-            dueRow.appendChild(el("span", { class: "due-done", text: String(counts.done) }));
-          }
-          kids.push(dueRow);
+        if (counts.done) {
+          dueRow.appendChild(el("span", { class: "due-done", text: String(counts.done) }));
         }
+        kids.push(dueRow);
+      }
 
-        /* 点格子本体 = 选中这一天（再点一次取消）—— 不跳转：
-           选中只是"边框加深 + 格内两个小按钮常驻"，真正的"看/加"仍由那两个按钮负责。
-           有任务的那天才出现「清单」（跳这天的待办），任何一天都有「＋」（在这天新建）。 */
-        var attrs = { class: cls, title: tip,
-                      onclick: function () { togglePick(item.date); } };
+      /* 点格子本体 = 选中这一天（再点一次取消）—— 不跳转：
+         选中只是"边框加深 + 格内两个小按钮常驻"，真正的"看/加"仍由那两个按钮负责。
+         有任务的那天才出现「清单」（跳这天的待办），任何一天都有「＋」（在这天新建）。 */
+      var attrs = { class: cls, title: tip,
+                    onclick: function () { togglePick(item.date); } };
 
-        if (hasTask) {
-          kids.push(el("button", {
-            class: "cal-open",
-            html: LIST_SVG,
-            title: "查看这天的待办",
-            onclick: function (event) {
-              event.stopPropagation();
-              gotoDay(item.date);
-            }
-          }));
-        }
-
+      if (hasTask) {
         kids.push(el("button", {
-          class: "cal-add",
-          html: PLUS_SVG,
-          title: "在这一天新建任务",
+          class: "cal-open",
+          html: LIST_SVG,
+          title: "查看这天的待办",
           onclick: function (event) {
             event.stopPropagation();
-            gotoAdd(item.date);
+            gotoDay(item.date);
           }
         }));
+      }
 
-        var node = el("div", attrs, kids);
-        cellNodes[item.date] = node;
-        grid.appendChild(node);
-      })(view.items[n]);
+      kids.push(el("button", {
+        class: "cal-add",
+        html: PLUS_SVG,
+        title: "在这一天新建任务",
+        onclick: function (event) {
+          event.stopPropagation();
+          gotoAdd(item.date);
+        }
+      }));
+
+      var node = el("div", attrs, kids);
+      cellNodes[item.date] = node;
+      var node = el("div", attrs, kids);
+      cellNodes[item.date] = node;
+      return node;
     }
+
+    /* 每行：最左一列是周号，右边 7 天；行内不属于本月的格子留空 */
+    for (var r = 0; r < rows; r++) {
+      grid.appendChild(el("div", { class: "cal-wk", text: rowWeek(r) }));
+      for (var c = 0; c < 7; c++) {
+        var idx = r * 7 + c - lead;
+        if (idx >= 0 && idx < view.items.length) {
+          grid.appendChild(buildCell(view.items[idx]));
+        } else {
+          grid.appendChild(el("div", { class: "cal-cell empty" }));
+        }
+      }
+    }
+
     gridBox.appendChild(grid);
 
     /* 图例 */

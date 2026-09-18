@@ -1080,9 +1080,12 @@ mark.hit {
   color: var(--text-dim);
 }
 
+/* 一周一行：最左一列是周序号（表头写"周"），右边 7 天。
+   表头与主体必须用同一套列定义（连 gap 都要一致），否则"一二三四五六日"跟下面的格子对不齐。 */
 .cal-week {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: 30px repeat(7, 1fr);
+  gap: 4px;
   margin-bottom: 4px;
 }
 .cal-wday {
@@ -1094,8 +1097,17 @@ mark.hit {
 
 .cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: 30px repeat(7, 1fr);
   gap: 4px;
+}
+
+/* 周序号格：跟同一行的格子等高、居中；字号小一档，不去抢日历本体的注意力 */
+.cal-wk {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-mute);
 }
 .cal-cell {
   position: relative;
