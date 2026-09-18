@@ -1545,3 +1545,199 @@ mark.hit {
   cursor: pointer;
 }
 .dp-trigger.blank { color: var(--text-mute); }
+
+/* ==================== 文件浏览 ==================== */
+
+.fb-shell { max-width: 940px; }
+
+/* ---- 位置栏：用户自己添加的可浏览位置 ---- */
+.fb-places {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.fb-places-label { font-size: 12px; color: var(--text-mute); margin-right: 2px; }
+.fb-muted { font-size: 12.5px; color: var(--text-mute); }
+.fb-place {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.fb-place.active { border-color: var(--accent); background: var(--accent-bg); }
+.fb-place-name {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  padding: 3px 4px 3px 11px;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fb-place.active .fb-place-name { color: var(--accent); font-weight: 500; }
+.fb-place-del {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-mute);
+  padding: 3px 8px 3px 2px;
+  display: inline-flex;
+  align-items: center;
+}
+.fb-place-del:hover { color: var(--danger); }
+.fb-add-btn { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ---- 添加位置面板 ---- */
+.fb-add {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.fb-add.hidden { display: none; }
+.fb-add-tip { font-size: 12px; color: var(--text-mute); margin-bottom: 8px; }
+.fb-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.fb-quick-item { cursor: pointer; background: transparent; font-family: inherit; }
+.fb-quick-item:hover { border-color: var(--accent); color: var(--accent); }
+.fb-add-row { display: flex; gap: 8px; }
+.fb-add-row .input { flex: 1; }
+
+/* ---- 工具行：上一级 + 面包屑 + 右侧开关与筛选 ---- */
+.fb-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.fb-up.disabled { opacity: .35; cursor: default; }
+.fb-crumb-strip {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+}
+.fb-crumb {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-dim);
+  padding: 3px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fb-crumb:hover { background: var(--panel-2); color: var(--text); }
+.fb-crumb.current { color: var(--heading); font-weight: 600; cursor: default; }
+.fb-crumb.current:hover { background: transparent; }
+.fb-sep { color: var(--text-mute); font-size: 12px; }
+.fb-tools { display: flex; align-items: center; gap: 10px; flex: none; }
+.fb-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.fb-check { margin: 0; cursor: pointer; }
+.fb-search { width: 150px; font-size: 12.5px; padding: 5px 9px; }
+
+/* ---- 列表：四列网格，表头与行共用同一套列宽 ---- */
+.fb-list { margin-top: 4px; }
+.fb-head, .fb-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px 140px 62px;
+  align-items: center;
+  gap: 8px;
+}
+.fb-head { border-bottom: 1px solid var(--border-soft); }
+.fb-col {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-mute);
+  padding: 6px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-align: left;
+}
+.fb-col:hover { color: var(--text); }
+.fb-col.active { color: var(--text); font-weight: 500; }
+.fb-sort-mark { display: inline-flex; }
+.fb-sort-mark.desc { transform: rotate(180deg); }
+
+.fb-row {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: default;
+  user-select: none;              /* 点行不该拖出一片文字高亮 */
+}
+.fb-row:hover { background: var(--panel-2); }
+.fb-row.picked { border-color: var(--text-dim); background: var(--panel-2); }
+.fb-row.unusable { opacity: .55; }
+
+.fb-name { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.fb-ico { display: inline-flex; color: var(--text-mute); flex: none; }
+.fb-row.is-dir .fb-ico { color: var(--accent); }
+.fb-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+}
+.fb-row.is-dir .fb-name-text { color: var(--heading); }
+.fb-size, .fb-time { font-size: 12.5px; color: var(--text-mute); }
+.fb-time { white-space: nowrap; }
+
+/* 行内操作按钮：平时不显示，鼠标进这一行才浮现（跟日历格子上的按钮同一套做法） */
+.fb-col-acts { display: flex; justify-content: flex-end; gap: 2px; }
+.fb-row .fb-col-acts .ico-btn { opacity: 0; }
+.fb-row:hover .fb-col-acts .ico-btn,
+.fb-row.picked .fb-col-acts .ico-btn,
+.fb-row .fb-col-acts .ico-btn:focus { opacity: 1; }
+
+.chip.fb-link { color: var(--text-mute); }
+.chip.fb-bad { color: var(--danger); border-color: var(--danger); }
+
+/* ---- 状态行 ---- */
+.fb-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 12px;
+  color: var(--text-mute);
+}
+.fb-note { color: var(--warn); }
+.fb-store { margin-left: auto; opacity: .75; }
+.fb-hint { margin-top: 8px; font-size: 12.5px; }
+.empty-icon .ic { display: block; width: 32px; height: 32px; margin: 0 auto 8px; }
+
+@media (max-width: 760px) {
+  .fb-head, .fb-row { grid-template-columns: minmax(0, 1fr) 72px 112px 56px; gap: 6px; }
+  .fb-search { width: 110px; }
+  .fb-store { display: none; }
+}

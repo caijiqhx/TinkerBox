@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import string
 import subprocess
 import sys
 
@@ -186,6 +187,128 @@ def open_in_file_manager(path):
             popen_detached(["open", "-R", target])
         else:
             popen_detached(["xdg-open", os.path.dirname(target) or "."])
+        return True
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------- 文件浏览
+
+
+def pseudo_filesystems():
+    """不是"普通文件系统"的目录前缀（POSIX 的 /proc /sys /dev）。
+
+    列这些目录要么毫无意义，要么会让请求挂死（读 /dev/zero 永不返回），
+    因此文件浏览一律拒绝。Windows 上不存在这类路径。
+    """
+    if IS_WINDOWS:
+        return ()
+    return ("/proc", "/sys", "/dev")
+
+
+def _xdg_user_dirs():
+    """读 `~/.config/user-dirs.dirs`，返回 XDG 用户目录（配置键 -> 路径）。
+
+    信创系统多为中文界面，桌面 / 文档 / 下载这些目录的**真实名字是中文**，
+    写死 "Desktop" / "Documents" 会一个都找不到 —— 必须尊重这份配置。
+    """
+    if IS_WINDOWS or IS_MACOS:
+        return {}
+    home = os.path.expanduser("~")
+    target = os.path.join(home, ".config", "user-dirs.dirs")
+    result = {}
+    try:
+        with open(target, "r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                result[key.strip()] = value.strip().strip('"').replace("$HOME", home)
+    except (IOError, OSError):
+        return {}
+    return result
+
+
+def home_dirs():
+    """常见位置（**只列真实存在的**），供文件浏览器做快捷入口。"""
+    home = os.path.expanduser("~")
+    xdg = _xdg_user_dirs()
+
+    def first(*candidates):
+        for item in candidates:
+            if item and os.path.isdir(item):
+                return item
+        return ""
+
+    wanted = (
+        ("家目录", home),
+        ("桌面", first(xdg.get("XDG_DESKTOP_DIR"), os.path.join(home, "Desktop"),
+                       os.path.join(home, "桌面"))),
+        ("文档", first(xdg.get("XDG_DOCUMENTS_DIR"), os.path.join(home, "Documents"),
+                       os.path.join(home, "文档"))),
+        ("下载", first(xdg.get("XDG_DOWNLOAD_DIR"), os.path.join(home, "Downloads"),
+                       os.path.join(home, "下载"))),
+        ("图片", first(xdg.get("XDG_PICTURES_DIR"), os.path.join(home, "Pictures"),
+                       os.path.join(home, "图片"))),
+        ("音乐", first(xdg.get("XDG_MUSIC_DIR"), os.path.join(home, "Music"),
+                       os.path.join(home, "音乐"))),
+        ("视频", first(xdg.get("XDG_VIDEOS_DIR"), os.path.join(home, "Videos"),
+                       os.path.join(home, "视频"))),
+    )
+
+    out, seen = [], set()
+    for label, path in wanted:
+        if not path or path in seen or not os.path.isdir(path):
+            continue
+        seen.add(path)
+        out.append({"label": label, "path": os.path.abspath(path)})
+    return out
+
+
+def volume_roots():
+    """盘符 / 挂载点。Windows 列存在的盘符；POSIX 列常见的挂载位置。"""
+    if IS_WINDOWS:
+        out = []
+        for letter in string.ascii_uppercase:
+            path = "%s:\\" % letter
+            if os.path.isdir(path):
+                out.append({"label": "%s 盘" % letter, "path": path})
+        return out
+
+    home = os.path.expanduser("~")
+    candidates = (
+        ("根目录", "/"),
+        ("挂载点", "/mnt"),
+        ("可移动介质", os.path.join("/media", os.path.basename(home))),
+        ("可移动介质", "/media"),
+        ("可移动介质", os.path.join("/run/media", os.path.basename(home))),
+        ("可移动介质", "/run/media"),
+    )
+    out, seen = [], set()
+    for label, path in candidates:
+        if path in seen or not os.path.isdir(path):
+            continue
+        seen.add(path)
+        out.append({"label": label, "path": path})
+    return out
+
+
+def open_with_default(path):
+    """用系统默认程序打开（文档交给 WPS、图片交给看图工具…）。返回是否成功。
+
+    ⚠️ 这个动作的本质是**让服务进程去启动本机程序**。调用方必须先确认两件事：
+    ① 路径在用户授权范围内；② 扩展名属于"数据型文件"白名单
+    （见 `tools/files/model.OPENABLE_EXTS`）。可执行体与脚本绝不能走到这里。
+    """
+    target = str(path)
+    try:
+        if IS_WINDOWS:
+            os.startfile(target)            # 仅 Windows 提供此函数
+        elif IS_MACOS:
+            popen_detached(["open", target])
+        else:
+            popen_detached(["xdg-open", target])
         return True
     except Exception:
         return False

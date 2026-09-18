@@ -21,10 +21,12 @@ def register_all():
         return registry.all_tools()
 
     from tools.calendar.tool import CalendarTool
+    from tools.files.tool import FilesTool
     from tools.todo.tool import TodoTool
 
     registry.register(TodoTool())
     registry.register(CalendarTool())
+    registry.register(FilesTool())
 
     _registered = True
     return registry.all_tools()

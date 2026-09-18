@@ -36,10 +36,11 @@
 | **中文输入** | ✅ **优于 Tkinter** | 走浏览器输入法，无需处理 XIM/fcitx |
 | 固定到桌面/启动器 | ✅ 胜任 | `.desktop` 图标 + `--app` 无地址栏窗口 |
 | 界面美观度 | ✅ 优于 Tkinter | HTML/CSS 表现力远超 Tk |
-| **系统原生文件对话框** | ⚠️ 需自建 | 现有工具**用不到**，推迟到 filebatch |
+| 文件浏览（只看信息） | ✅ 完全胜任 | 目录列举 + 表格渲染；文件系统访问由后端 action 承担 |
+| **系统原生文件对话框** | ⚠️ 需自建 | 浏览器拿不到原生目录选择器。文件浏览用"手输路径 / 常见位置 / 挂载点"代替；**批量多选**才需要自建组件，推迟到 filebatch |
 | 系统托盘常驻 | ❌ 不支持 | 若将来必需，才需要考虑 tkinter 承载层 |
 
-**结论**：现有工具（待办清单 / 日历）的全部需求 Web UI 均可覆盖，**GUI 承载层不做**。
+**结论**：现有工具（待办清单 / 日历 / 文件浏览）的全部需求 Web UI 均可覆盖，**GUI 承载层不做**。
 
 ### 入口页
 
@@ -138,8 +139,14 @@ ToolBox/
 │        ├─ model.py         # 月视图 / 农历（1900-2100）/ 节假日状态
 │        ├─ tool.py          # Tool 实现（actions；无 CLI）
 │        └─ holidays.json    # 内置节假日数据（离线可用）
-├─ data/                     # 运行时数据（配置、todo.json、日志）
-└─ tests/                    # test_todo / test_calendar / test_core / test_instance
+│     └─ files/
+│        ├─ __init__.py
+│        ├─ guard.py         # 【安全边界】路径解析 + 授权位置校验 + 伪文件系统拒绝
+│        ├─ model.py         # 条目结构 / 排序 / 格式化 / 可打开扩展名白名单
+│        ├─ store.py         # data/files.json：用户添加的浏览位置
+│        └─ tool.py          # Tool 实现（actions；无 CLI）
+├─ data/                     # 运行时数据（配置、todo.json、files.json、日志）
+└─ tests/                    # test_todo / test_calendar / test_files / test_core / test_instance / test_main
 ```
 
 `services/tasks.py`（后台长任务）首版**不实现** —— TodoList 无耗时操作。等将来做文件批处理时再加。
@@ -295,11 +302,16 @@ IS_WINDOWS = os.name == "nt"
 
 def browser_candidates():     # 浏览器候选列表（按平台返回，Chromium 内核优先）
 def has_display():            # 是否有图形环境
-def is_case_sensitive():      # Windows 不区分大小写；Linux 区分（为将来 filebatch 预留）
+def is_case_sensitive():      # Windows 不区分大小写；Linux 区分（文件浏览的路径比较用它）
 def allow_address_reuse():    # Windows 必须返回 False（否则两个进程能绑同一端口）
 def spawn_background(...)     # 分离进程启动（DETACHED_PROCESS / start_new_session）
 def background_python():      # Windows 优先 pythonw.exe（GUI 子系统，不附着控制台）
-def open_in_file_manager(path)
+def open_in_file_manager(path)   # 在文件管理器里定位
+# ↓ 文件浏览用
+def home_dirs()               # 常见位置（读 XDG user-dirs，兼容中文目录名）
+def volume_roots()            # 盘符 / 挂载点
+def pseudo_filesystems()      # /proc /sys /dev（POSIX；Windows 返回空）
+def open_with_default(path)   # 用系统默认程序打开（xdg-open / os.startfile / open）
 ```
 
 数据目录的选址（项目内 `data/` 优先，不可写时退回用户目录；`TOOLBOX_DATA_DIR` 可整体覆盖）放在 `core/paths.py`，与平台行为分开。
@@ -450,6 +462,38 @@ python3 src/main.py todo where             # 显示数据文件位置
   前端一屏铺 12 张月份卡片（每格只标假期 / 调休 / 周末 / 今天，具体日子放悬停提示），
   点某天 → 切回月视图、跳到该月并选中那天；年度视图**不做待办计数**（那要 12 次请求，小格也放不下）
 
+### 8.7 文件浏览工具（简述）
+
+第三个工具（`tools/files/`）。**只读** —— 查看目录里的文件信息，不做预览（不解析任何文档格式）。
+
+- **边界是这个工具的核心**，全部收口在 `guard.py`，任何路径都要先过 `guard.resolve`：
+  - **不越出用户添加过的位置**：`realpath` 之后必须落在某个位置之内 —— 符号链接因此自动受限
+    （指向范围外的链接解析后就不在范围内），不需要单独处理链接类型
+  - **统一成绝对真实路径**（normpath + realpath）：靠字符串前缀比较会被 `root/../../etc` 绕过
+  - **拒绝伪文件系统**（`/proc` / `/sys` / `/dev`）：列这些目录要么没意义，要么把请求挂死（`/dev/zero`）
+  - 比较用 `guard.key()`：Windows 大小写不敏感、Linux 敏感，**必须与文件系统同一口径**，
+    否则同一目录能被添加两次、边界比较也会失效
+- **位置清单**存 `tools/files/store.py` → `<数据目录>/files.json`（只记目录路径）。
+  首次使用是空的，界面引导从常见位置（`platform.home_dirs()`，**读 XDG user-dirs，兼容中文目录名**）
+  或盘符 / 挂载点（`platform.volume_roots()`）一键添加，或手输路径
+- **`list` 只返回文件信息**，不返回任何文件内容：名称 / 大小 / 修改时间 / 类型 /
+  是否目录 / 是否链接 / 链接是否越界。目录永远排前面；超过 `LIST_LIMIT`（2000）截断并说明。
+  **按名称排序时先排序再截断**（不需要读元信息，省掉大目录里几万次 `stat`），
+  按大小 / 时间排序则必须先有元信息、只能全量算完再截断
+- **单项失败不影响整个目录**：`stat` 读不到就留空并记下原因，条目照样列出来
+- **文件名编码**：Linux 允许任意字节的文件名，Python 用 surrogateescape 解码，
+  这类字符串 `json.dumps` 会直接抛异常 —— **一个名字奇怪的文件就能让整个目录列不出来**，
+  所以 `model.clean_text()` 必须降级，并把"不可回传"标记给前端
+- **两个交给系统的动作**，安全要求不同：
+  - `open`（用系统默认程序打开）：本质是**让服务进程启动本机程序**，所以两道闸门 ——
+    路径必须在位置之内 **且** 扩展名在 `model.OPENABLE_EXTS` **白名单**里。
+    白名单只放数据型文件（**含 `.wps` / `.et` / `.dps`**，交给系统里的 WPS 打开）；
+    **可执行体与脚本一律不在其中**（`.sh` / `.desktop` / `.bat` / `.exe` / `.lnk` / `.ps1` …）——
+    能打开脚本就等于把任意代码执行暴露给接口
+  - `reveal`（在文件管理器里打开 / 定位）：**不受白名单限制**，它是白名单之外文件的出口
+- **不做**：预览（不解析 docx / xlsx / wps 等格式）、上传、新建、改名、删除、移动。
+  上传尤其要单独设计（`MAX_BODY = 1MB` 是给 JSON 用的，二进制得走另一条流式通道）
+
 ---
 
 ## 9. Windows 上的测试方案（重要）
@@ -554,6 +598,8 @@ Categories=Utility;
 | Windows `SO_REUSEADDR` 让两个进程绑同一端口 | 平台判断，**Windows 关闭 `allow_reuse_address`**（否则"端口被占用"分支永不触发） |
 | 本机探测被 `http_proxy` 劫持 | `build_opener(ProxyHandler({}))` 显式绕过代理（内网机器常设代理） |
 | 本机 CSRF | token + Host/Origin 校验（见 5.3） |
+| 文件浏览越权读到授权范围之外 | 所有路径先过 `tools/files/guard.py`：realpath + 授权位置前缀校验、`..` 与符号链接一并受限、伪文件系统拒绝（见 8.7） |
+| "用系统默认程序打开"变成任意代码执行 | **扩展名白名单**（可执行体与脚本一律拒绝），白名单之外的文件只能走"在文件管理器中打开" |
 | 目标机 Python 版本过低 | 全局 3.7 兼容编码约定 + `doctor` 首行报告版本 |
 | 中文输入 | 走浏览器，无需处理（相对 Tkinter 是优势） |
 
@@ -583,8 +629,11 @@ Categories=Utility;
   - 两阶段改名（先临时名再目标名，防 A↔B 互换）
   - 冲突检测需覆盖：重名 · 非法字符 · Windows 保留名 · 结尾点/空格 · **大小写敏感差异（Linux 区分，Windows 不区分）**
   - 删除走回收站，永不硬删；操作可撤销
-  - 前端需要文件/目录选择器 → 补 `POST /api/fs/list` + 目录树组件
-- **doc（文档处理）** —— 只做「纯文件层」：docx/xlsx = zip + XML，用 `zipfile` + `xml.etree` 解析与比对，**不依赖任何 Office 自动化**
+  - **可直接复用文件浏览已有的两件东西**：`guard.py` 的路径边界（那时才开始真正重要 —— 要写文件），
+    以及"用户添加浏览位置 + 列目录"这套前端交互；还缺的是**多选**与目录树组件
+  - ⚠️ 它会**写**文件系统，是本项目里第一个有破坏性的工具，需要单独的确认／撤销设计
+- **doc（文档处理）** —— 只做「纯文件层」：docx/xlsx = zip + XML，用 `zipfile` + `xml.etree` 解析与比对，**不依赖任何 Office 自动化**。
+  ⚠️ 用户已明确否掉"查看 WPS / docx 文件"（见 §14），要做需重新确认范围
 - **tkinter 承载层** —— 仅当确认目标机有 tkinter 且确实需要系统托盘时再做
 
 ---
@@ -596,7 +645,7 @@ Categories=Utility;
 | 事项 | 决定 |
 |---|---|
 | 项目名 | **ToolBox** |
-| 现有工具 | **待办清单 + 日历**（保留注册表机制：加工具 = 新增 `tools/<name>/` + 注册一行） |
+| 现有工具 | **待办清单 + 日历 + 文件浏览**（保留注册表机制：加工具 = 新增 `tools/<name>/` + 注册一行） |
 | 入口页 | **始终显示**，不做自适应隐藏 |
 | 到期日 | **已实现**：`due` 字段 + 「已计划」视图 + 从日历跳入的「某天待办」。**系统提醒/通知不做**（避免引入后台定时任务） |
 | 多清单 / 分类 | **已实现**：自定义清单 + 拖拽排序 + 置顶；兜底清单「未分类」固定排最后 |
@@ -608,5 +657,7 @@ Categories=Utility;
 | 标签筛选 | **暂缓**（标签本身已支持，只是还没有"按标签过滤"的入口） |
 | 固定到桌面 | **做**，Windows 上先用 `.lnk` 验证，`.desktop` 模板一并入库 |
 | 系统托盘 / 开机自启 | **不做** |
-| 文件/目录选择器 | **不需要**（现有工具用不到），推迟到 filebatch |
+| 文件浏览 | **做**（第三个工具）：只读查看文件信息 + 交给系统打开；**不做预览/上传/改名/删除** |
+| 文档查看（docx / xlsx / wps 预览） | **不做**（用户已否）。浏览器原生只认 PDF；老格式 `.wps`/`.et`/`.dps` 是 CFB/OLE2，纯标准库只能抽出纯文本 |
+| 文件/目录选择器 | 文件浏览自带"添加位置"；**同时操作多个文件的批处理**推迟到 filebatch |
 | 常驻服务 | 固定端口 + 幂等启动（点一次 run 当天一直驻留），空闲 12 小时自动退出 |
